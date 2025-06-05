@@ -219,7 +219,7 @@ class wfs_download:
         grid = self.create_grid_from_polygon(polygon_fc, gdb_param, cell_size)
 
         # Schritt 2: Wfs im Bereich der Bounding Boxen downloaden
-        self.download_wfs(grid, layer_list, work_dir, req_settings)
+        self.download_wfs(grid, layer_list, gdb_param, work_dir, req_settings)
 
         # Schritt 3: Verarbeitungsdaten wieder entfernen
         if checkbox is False:
@@ -349,13 +349,14 @@ class wfs_download:
         return bboxes
 
 
-    def download_wfs(self, grid, layer_list, work_dir, req_settings):
+    def download_wfs(self, grid, layer_list, gdb, work_dir, req_settings):
         '''
         Führt den Download von Layern vom WFS in Form von json-Dateien im durch die Bounding Boxen begrenzten Bereich durch
         und speichert diese in Feature Klassen in der übergebenen gdb
 
         :param grid: Feature Class des Bereichs als Rechteck(e)
         :param layer_list: Liste der zu downloadenden Layer
+        :param gdb: Geodatabase in die die Bounding Box gespeichert wird
         :param work_dir: lokal ausgewählter Ordner für die json-files
         :param req_settings: Liste mit Einstellungen zum Request: [timeout(int), verify(boolean)]
         '''
@@ -437,6 +438,25 @@ class wfs_download:
                 
                 arcpy.AddMessage(f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst.")
 
+            output_fc_2D = output_fc + '_tmp'
+            arcpy.AddMessage(output_fc_2D)
+            arcpy.AddMessage(output_fc)
+            arcpy.env.outputZFlag = "Disabled"
+            arcpy.env.outputMFlag = "Disabled"
+
+            arcpy.FeatureClassToFeatureClass_conversion(
+                in_features=output_fc,
+                out_path=gdb,
+                out_name=output_fc_2D
+            )
+
+            arcpy.Delete_management(output_fc)
+            arcpy.Rename_management(output_fc_2D, output_fc)
+
+            arcpy.env.outputZFlag = "Enabled"
+            arcpy.env.outputMFlag = "Enabled"
+
+            arcpy.AddMessage("Die Geometrietypen der feature class wurde geändert")
 
     def getDifferentGeometryTypes(self, json_file):
         '''
@@ -496,7 +516,6 @@ class wfs_download:
         self.process_data.append(json_file)
         with open(json_file, 'wb') as f:
             f.write(response.content)
-        
         #verschiedene Geometrietypen im JSON finden und auftrennen, wenn nötig --> v_al_vergleichsstueck
         layer_files = []
         geometry_info = self.getDifferentGeometryTypes(json_file)
