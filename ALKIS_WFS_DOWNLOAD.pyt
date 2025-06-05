@@ -219,7 +219,7 @@ class wfs_download:
         grid = self.create_grid_from_polygon(polygon_fc, gdb_param, cell_size)
 
         # Schritt 2: Wfs im Bereich der Bounding Boxen downloaden
-        self.download_wfs(grid, layer_list, work_dir, req_settings)
+        self.download_wfs(grid, layer_list, work_dir, req_settings, polygon_fc)
 
         # Schritt 3: Verarbeitungsdaten wieder entfernen
         if checkbox is False:
@@ -349,7 +349,7 @@ class wfs_download:
         return bboxes
 
 
-    def download_wfs(self, grid, layer_list, work_dir, req_settings):
+    def download_wfs(self, grid, layer_list, work_dir, req_settings, polygon_fc):
         '''
         Führt den Download von Layern vom WFS in Form von json-Dateien im durch die Bounding Boxen begrenzten Bereich durch
         und speichert diese in Feature Klassen in der übergebenen gdb
@@ -358,6 +358,7 @@ class wfs_download:
         :param layer_list: Liste der zu downloadenden Layer
         :param work_dir: lokal ausgewählter Ordner für die json-files
         :param req_settings: Liste mit Einstellungen zum Request: [timeout(int), verify(boolean)]
+        :param polygon_fc: Feature-Class des Eingabe-Polygons (zum Löschen von vollständig außerhalb liegenden Polygonen)
         '''
 
         # Bounding Boxen
@@ -436,7 +437,8 @@ class wfs_download:
                     arcpy.AlterField_management(output_fc, new_field, new_field_name=old_field)
                 
                 arcpy.AddMessage(f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst.")
-
+        
+            self.intersect(polygon_fc, output_fc)
 
     def getDifferentGeometryTypes(self, json_file):
         '''
@@ -527,3 +529,30 @@ class wfs_download:
         arcpy.AddMessage(f"Layer {v_al_layer} erfolgreich gedownloaded und als json-file in {work_dir} gespeichert")
 
         return layer_files
+    
+    def intersect(self, polygon_fc, output_fc):
+        '''
+        Löscht alle Polygone des outputs des wfs, die vollständig außerhalb des Eingabe-Fensters liegen
+        (Aufgrund des Abrufs der wfs-Daten mit der Bounding-Box wird in der Regel deutlich über den Eingabe-Bereich abgerufen und gedownloaded)
+
+        :param polygon_fc: Feature-Class des Eingabe-Polygons
+        :param output_fc: Feature-Class des Downloads des WFS
+        '''
+        input_lyr = "lyr_input_tmp"
+        arcpy.MakeFeatureLayer_management(polygon_fc, input_lyr)
+        output_lyr = "lyr_output_tmp"
+        arcpy.MakeFeatureLayer_management(output_fc, output_lyr)
+
+        arcpy.SelectLayerByLocation_management(
+            in_layer=output_lyr,
+            overlap_type="INTERSECT",
+            select_features=input_lyr,
+            selection_type="NEW_SELECTION",
+            invert_spatial_relationship="INVERT"
+        )
+
+        arcpy.DeleteFeatures_management(output_lyr)
+        arcpy.Delete_management(input_lyr)
+        arcpy.Delete_management(output_lyr)
+
+        arcpy.AddMessage(f"Abgerufene Daten des WFS-Dienstes, die vollständig außerhalb von {polygon_fc} liegen, wurden entfernt.")
