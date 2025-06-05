@@ -17,13 +17,14 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
 
-import arcpy
 from urllib.parse import urlencode
-import requests
 from xml.etree import ElementTree as ET
 import os
-import arcpy
 import json
+from datetime import datetime
+import requests
+import arcpy
+from requests.exceptions import ConnectionError, HTTPError, Timeout, RequestException
 
 #Konfigurationsparameter
 config = {
@@ -404,6 +405,12 @@ class wfs_download:
             arcpy.DeleteIdentical_management(output_fc,"{0}".format(param))
 
 
+            arcpy.AddField_management(
+                in_table=output_fc,
+                field_name="Datum",
+                field_type="DATE"
+            )
+
             # Liste für die Feldzuordnung
             field_mappings = []
 
@@ -421,17 +428,23 @@ class wfs_download:
             if field_mappings:
                 cursor_fields = []
                 for old_field, new_field in field_mappings:
-                    cursor_fields.extend([new_field, old_field])
+                    cursor_fields.extend([old_field, new_field])
+                    # cursor_fields.extend([new_field, old_field])
+                cursor_fields.append("Datum")
                 
                 with arcpy.da.UpdateCursor(output_fc, cursor_fields) as cursor:
                     for row in cursor:
                         # Für jedes Paar (new_field, old_field) wird der Wert vom alten in das neue Feld kopiert.
-                        for i in range(0, len(cursor_fields), 2):
+                        for i in range(0, len(cursor_fields) - 1, 2):
                             row[i] = row[i + 1]
+                        row[-1] = datetime.now()
                         cursor.updateRow(row)
 
                 # alte Felder löschen, temp-Felder umbenennen
                 for old_field, new_field in field_mappings:
+                    arcpy.AddMessage(field_mappings)
+                    arcpy.AddMessage(f"old field {old_field}")
+                    arcpy.AddMessage(f"new field {new_field}")
                     arcpy.DeleteField_management(output_fc, old_field)
                     arcpy.AlterField_management(output_fc, new_field, new_field_name=old_field)
                 
