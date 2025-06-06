@@ -407,7 +407,7 @@ class wfs_download:
 
             arcpy.AddField_management(
                 in_table=output_fc,
-                field_name="Datum",
+                field_name="Abrufdatum",
                 field_type="DATE"
             )
 
@@ -427,26 +427,23 @@ class wfs_download:
             # mit einem Updatecursor Attributwerte in temp-Felder übertragen
             if field_mappings:
                 cursor_fields = []
-                for old_field, new_field in field_mappings:
-                    cursor_fields.extend([old_field, new_field])
+                for field, field_temp in field_mappings:
+                    cursor_fields.extend([field, field_temp])
                     # cursor_fields.extend([new_field, old_field])
-                cursor_fields.append("Datum")
+                cursor_fields.append("Abrufdatum")
                 
                 with arcpy.da.UpdateCursor(output_fc, cursor_fields) as cursor:
                     for row in cursor:
                         # Für jedes Paar (new_field, old_field) wird der Wert vom alten in das neue Feld kopiert.
                         for i in range(0, len(cursor_fields) - 1, 2):
-                            row[i] = row[i + 1]
+                            row[i + 1] = row[i]
                         row[-1] = datetime.now()
                         cursor.updateRow(row)
 
                 # alte Felder löschen, temp-Felder umbenennen
-                for old_field, new_field in field_mappings:
-                    arcpy.AddMessage(field_mappings)
-                    arcpy.AddMessage(f"old field {old_field}")
-                    arcpy.AddMessage(f"new field {new_field}")
-                    arcpy.DeleteField_management(output_fc, old_field)
-                    arcpy.AlterField_management(output_fc, new_field, new_field_name=old_field)
+                for field, field_temp in field_mappings:
+                    arcpy.DeleteField_management(output_fc, field)
+                    arcpy.AlterField_management(output_fc, field_temp, new_field_name=field, new_field_alias=field)
                 
                 arcpy.AddMessage(f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst.")
 
