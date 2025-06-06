@@ -17,13 +17,11 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
 
-import arcpy
-from urllib.parse import urlencode
-import requests
 from xml.etree import ElementTree as ET
 import os
-import arcpy
 import json
+import requests
+import arcpy
 
 #Konfigurationsparameter
 config = {
@@ -66,6 +64,8 @@ class wfs_download:
         self.layers = []
         self.process_data = []
         self.process_fc = []
+        self.url = ''
+
     def getParameterInfo(self):
         """Define the tool parameters."""
 
@@ -153,6 +153,7 @@ class wfs_download:
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
+        timeout = parameters[6].value
 
         #Flag, dass GetCapabilities nur bei der Initialisierung aufgerufen wird
         global layers_initialized
@@ -164,7 +165,7 @@ class wfs_download:
         params = config["params_capabilities"]
 
         # Capabilites (schon bei Toolaufruf) auslesen und zu Multivaluelist hinzufügen
-        response = requests.get(self.url, params=params, verify=False)
+        response = requests.get(self.url, params=params, timeout=timeout, verify=False)
 
         if response.status_code == 200:
             # Parste die XML-Antwort
@@ -193,7 +194,7 @@ class wfs_download:
                 workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
         return
 
-    def execute(self, parameters, messages):
+    def execute(self, parameters, _messages):
         """The source code of the tool."""
 
         # Get Parameters
@@ -215,7 +216,7 @@ class wfs_download:
         # Prüfen ob Layernamen des wfs geändert wurden
         layer_list = checked_layers.split(";")
         if not layer_list[0].startswith("nora:"):
-            arcpy.AddMessage(f"!!!Achtung!!! Die Layernamen im Dienst wurden geändert. Bitte beachten!")
+            arcpy.AddMessage("!!!Achtung!!! Die Layernamen im Dienst wurden geändert. Bitte beachten!")
 
         arcpy.AddMessage(f"Workspace ausgewählt: {gdb_param}")
         arcpy.AddMessage(f"Layer ausgewählt: {layer_list}")
@@ -239,7 +240,7 @@ class wfs_download:
                 os.remove(json_file)        
         return
 
-    def postExecute(self, parameters):
+    def postExecute(self, _parameters):
         """This method takes place after outputs are processed and
         added to the display."""
         return
