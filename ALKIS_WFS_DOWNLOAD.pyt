@@ -439,8 +439,6 @@ class wfs_download:
                 arcpy.AddMessage(f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst.")
 
             output_fc_2D = output_fc + '_tmp'
-            arcpy.AddMessage(output_fc_2D)
-            arcpy.AddMessage(output_fc)
             arcpy.env.outputZFlag = "Disabled"
             arcpy.env.outputMFlag = "Disabled"
 
@@ -453,10 +451,7 @@ class wfs_download:
             arcpy.Delete_management(output_fc)
             arcpy.Rename_management(output_fc_2D, output_fc)
 
-            arcpy.env.outputZFlag = "Enabled"
-            arcpy.env.outputMFlag = "Enabled"
-
-            arcpy.AddMessage("Die Geometrietypen der feature class wurde geändert")
+            arcpy.AddMessage("Z-Werte wurden entfernt")
 
     def getDifferentGeometryTypes(self, json_file):
         '''
