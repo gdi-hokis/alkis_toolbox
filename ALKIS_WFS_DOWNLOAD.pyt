@@ -42,6 +42,8 @@ config = {
         "identify_fields":["gml_id","gesamtschluessel"]}
         #Gesamtschlüssel für Gewanne/Straßen nötig, da es dort identische Geometrien mit anderen Bezeichnungen gibt...
 
+# Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
+layers_initialized = False
 
 class Toolbox:
     def __init__(self):
@@ -64,25 +66,6 @@ class wfs_download:
         self.layers = []
         self.process_data = []
         self.process_fc = []
- 
-        # URL des WFS-Services
-        self.url = config["wfs_url"]
-        params = config["params_capabilities"]
-
-        # Capabilites (schon bei Toolaufruf) auslesen und zu Multivaluelist hinzufügen
-        response = requests.get(self.url, params=params, verify=False)
-
-        if response.status_code == 200:
-            # Parste die XML-Antwort
-            root = ET.fromstring(response.content)
-            # Finde und logge alle verfügbaren Layer
-            for layer in root.findall('.//{http://www.opengis.net/wfs/2.0}FeatureType'):
-                layer_name = layer.find('.//{http://www.opengis.net/wfs/2.0}Name').text
-                self.layers.append((layer_name))
-        else:
-            arcpy.AddError(f"Fehler bei GetCapabilities: {response.status_code}")
-
-
     def getParameterInfo(self):
         """Define the tool parameters."""
 
@@ -104,8 +87,6 @@ class wfs_download:
             multiValue=True)
 
         param1.filter.type = "ValueList"
-        param1.filter.list = self.layers    #alle vom Dienst verfügbaren Layer in Multivalue-List
-
         param2 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
             name="existing_geodatabase",
@@ -172,6 +153,31 @@ class wfs_download:
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
+
+        #Flag, dass GetCapabilities nur bei der Initialisierung aufgerufen wird
+        global layers_initialized
+        if layers_initialized:
+            return
+        
+        # URL des WFS-Services
+        self.url = config["wfs_url"]
+        params = config["params_capabilities"]
+
+        # Capabilites (schon bei Toolaufruf) auslesen und zu Multivaluelist hinzufügen
+        response = requests.get(self.url, params=params, verify=False)
+
+        if response.status_code == 200:
+            # Parste die XML-Antwort
+            root = ET.fromstring(response.content)
+            # Finde und logge alle verfügbaren Layer
+            for layer in root.findall('.//{http://www.opengis.net/wfs/2.0}FeatureType'):
+                layer_name = layer.find('.//{http://www.opengis.net/wfs/2.0}Name').text
+                self.layers.append((layer_name))
+            parameters[1].filter.list = self.layers
+            layers_initialized = True
+        else:
+            parameters[1].setErrorMessage("Fehler bei GetCapabilites. WFS-Dienst nicht erreichbar…")
+
         return
 
     def updateMessages(self, parameters):
