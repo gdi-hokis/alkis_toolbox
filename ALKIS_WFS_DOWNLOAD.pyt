@@ -64,7 +64,7 @@ class wfs_download:
         self.layers = []
         self.process_data = []
         self.process_fc = []
-        self.url = ''
+        self.url = config["wfs_url"]
 
     def getParameterInfo(self):
         """Define the tool parameters."""
