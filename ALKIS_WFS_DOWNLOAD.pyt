@@ -8,7 +8,7 @@
 # 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
 
 # 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the
-   # documentation and/or other materials provided with the distribution.
+# documentation and/or other materials provided with the distribution.
 
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
 # THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
@@ -17,31 +17,32 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
 
+from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 import os
 import json
+from datetime import datetime
+import requests
+import json
 import requests
 import arcpy
+from requests.exceptions import ConnectionError, HTTPError, Timeout, RequestException
 
-#Konfigurationsparameter
+# Konfigurationsparameter
 config = {
-        "wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
-        "params_capabilities": {
-            "service": "WFS",
-            "request": "GetCapabilities",
-            "version": "2.0.0"
-        },
-        "params_feature": {
-            "service": "WFS",
-            "request": "GetFeature",
-            "version": "2.0.0",
-            "outputFormat": "json"
-        },
-        "identify_fields":["gml_id","gesamtschluessel"]}
-        #Gesamtschlüssel für Gewanne/Straßen nötig, da es dort identische Geometrien mit anderen Bezeichnungen gibt...
+    "wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
+    "params_capabilities": {"service": "WFS", "request": "GetCapabilities", "version": "2.0.0"},
+    "params_feature": {"service": "WFS", "request": "GetFeature", "version": "2.0.0", "outputFormat": "json"},
+    "identify_fields": ["gml_id", "gesamtschluessel"],
+}
+# Gesamtschlüssel für Gewanne/Straßen nötig, da es dort identische Geometrien mit anderen Bezeichnungen gibt...
 
 # Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
 layers_initialized = False
+
+# Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
+layers_initialized = False
+
 
 class Toolbox:
     def __init__(self):
@@ -74,8 +75,9 @@ class wfs_download:
             name="in_featureset",
             datatype="GPFeatureRecordSetLayer",
             parameterType="Required",
-            direction="Input")
-        
+            direction="Input",
+        )
+
         param0.filter.list = ["Polygon"]
 
         param1 = arcpy.Parameter(
@@ -84,7 +86,8 @@ class wfs_download:
             datatype="GPString",
             parameterType="Required",
             direction="Input",
-            multiValue=True)
+            multiValue=True,
+        )
 
         param1.filter.type = "ValueList"
         param2 = arcpy.Parameter(
@@ -92,41 +95,37 @@ class wfs_download:
             name="existing_geodatabase",
             datatype="DEWorkspace",
             parameterType="Required",
-            direction="Input")
+            direction="Input",
+        )
 
         param3 = arcpy.Parameter(
             displayName="Speicherordner für JSON Download",
             name="folder",
             datatype="DEFolder",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
         param4 = arcpy.Parameter(
             displayName="Verarbeitungsdaten behalten?",
             name="process_data",
             datatype="GPBoolean",
             parameterType="Optional",
-            direction="Input"
+            direction="Input",
         )
-        param4.value = True #standarmäßig werden Verarbeitungsdaten behalten
-
+        param4.value = True  # standarmäßig werden Verarbeitungsdaten behalten
 
         param5 = arcpy.Parameter(
             displayName="Max. BoundingBox Seitenlänge",
             name="cell_size",
             datatype="GPLong",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
         param5.value = 20000
         param5.category = "Weitere Parameter"
 
         param6 = arcpy.Parameter(
-            displayName="Timeout",
-            name="timeout",
-            datatype="GPLong",
-            parameterType="Required",
-            direction="Input"
+            displayName="Timeout", name="timeout", datatype="GPLong", parameterType="Required", direction="Input"
         )
         param6.value = 120
         param6.category = "Weitere Parameter"
@@ -136,11 +135,10 @@ class wfs_download:
             name="verify_certifikate",
             datatype="GPBoolean",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
         param7.value = True
         param7.category = "Weitere Parameter"
-
 
         params = [param0, param1, param2, param3, param4, param5, param6, param7]
         return params
@@ -155,11 +153,11 @@ class wfs_download:
         has been changed."""
         timeout = parameters[6].value
 
-        #Flag, dass GetCapabilities nur bei der Initialisierung aufgerufen wird
+        # Flag, dass GetCapabilities nur bei der Initialisierung aufgerufen wird
         global layers_initialized
         if layers_initialized:
             return
-        
+
         # URL des WFS-Services
         self.url = config["wfs_url"]
         params = config["params_capabilities"]
@@ -171,8 +169,8 @@ class wfs_download:
             # Parste die XML-Antwort
             root = ET.fromstring(response.content)
             # Finde und logge alle verfügbaren Layer
-            for layer in root.findall('.//{http://www.opengis.net/wfs/2.0}FeatureType'):
-                layer_name = layer.find('.//{http://www.opengis.net/wfs/2.0}Name').text
+            for layer in root.findall(".//{http://www.opengis.net/wfs/2.0}FeatureType"):
+                layer_name = layer.find(".//{http://www.opengis.net/wfs/2.0}Name").text
                 self.layers.append((layer_name))
             parameters[1].filter.list = self.layers
             layers_initialized = True
@@ -185,7 +183,7 @@ class wfs_download:
         """Modify the messages created by internal validation for each tool
         parameter. This method is called after internal validation."""
         workspace_param = parameters[2]
-        
+
         # Prüfen ob Geodatabase ausgewählt wurde (bei Datentyp "DEWorkspace" theoretisch Auswahl eines Ordners möglich)
         if workspace_param.value:
             workspace_path = workspace_param.valueAsText
@@ -199,7 +197,7 @@ class wfs_download:
 
         # Get Parameters
         polygon_fc = parameters[0].value
-        checked_layers = parameters[1].valueAsText #semicolon separated string
+        checked_layers = parameters[1].valueAsText  # semicolon separated string
         gdb_param = parameters[2].valueAsText
         arcpy.env.workspace = parameters[2].valueAsText
         work_dir = parameters[3].valueasText
@@ -221,7 +219,6 @@ class wfs_download:
         arcpy.AddMessage(f"Workspace ausgewählt: {gdb_param}")
         arcpy.AddMessage(f"Layer ausgewählt: {layer_list}")
 
-
         # Schritt 1: Bounding Boxen erstellen
         grid = self.create_grid_from_polygon(polygon_fc, gdb_param, cell_size)
 
@@ -233,11 +230,11 @@ class wfs_download:
             # Verarbeitungsdaten aus geodatabase entfernen
             for fc in self.process_fc:
                 if arcpy.Exists(fc):
-                    arcpy.Delete_management(fc,"")
-            
+                    arcpy.Delete_management(fc, "")
+
             # Verarbeitungsdaten aus lokalem Ordner entfernen
             for json_file in self.process_data:
-                os.remove(json_file)        
+                os.remove(json_file)
         return
 
     def postExecute(self, _parameters):
@@ -245,22 +242,19 @@ class wfs_download:
         added to the display."""
         return
 
-
-
-
     def create_grid_from_polygon(self, polygon_fc, gdb, cell_size):
         """
         Erstellt ein Grid aus quadratischen Extents innerhalb eines Polygons.
         Dabei werden drei Fälle unterschieden:
-        1. Wenn beide Kantenlängen (x und y) kleiner als cell_size sind, 
+        1. Wenn beide Kantenlängen (x und y) kleiner als cell_size sind,
             wird der Extent übernommen.
-        2. Wenn nur eine Dimension kleiner als cell_size ist, wird in dieser Richtung 
-            nur eine Zelle erzeugt, in der anderen Richtung volle Zellen (cell_size) 
+        2. Wenn nur eine Dimension kleiner als cell_size ist, wird in dieser Richtung
+            nur eine Zelle erzeugt, in der anderen Richtung volle Zellen (cell_size)
             und ggf. eine Restzelle.
-        3. Wenn beide Dimensionen größer als cell_size sind, werden volle Zellen plus 
+        3. Wenn beide Dimensionen größer als cell_size sind, werden volle Zellen plus
             ggf. Restzellen erzeugt.
-            
-        
+
+
         :param polygon_fc: Feature-Class des Eingabe-Polygons
         :param gdb: Geodatabase in die die Bounding Box gespeichert wird
         :param cell_size: Seitenlänge der vollen Zellen in Metern (Standard: 20000m)
@@ -269,7 +263,7 @@ class wfs_download:
         # Spatial Reference übernehmen
         spatial_ref = arcpy.Describe(polygon_fc).spatialReference
 
-        # Output-Feature-Class in definierter gdb neu anlegen        
+        # Output-Feature-Class in definierter gdb neu anlegen
         bbox_name = arcpy.Describe(polygon_fc).name + "_bbox"
         bbox_fc = os.path.join(gdb, bbox_name)
 
@@ -282,18 +276,16 @@ class wfs_download:
             geometry_type="ENVELOPE",
             group_option="ALL",
             group_field=None,
-            mbg_fields_option="NO_MBG_FIELDS"
+            mbg_fields_option="NO_MBG_FIELDS",
         )
-
 
         desc = arcpy.Describe(bbox_fc)
         extent = desc.extent
         polygon_extent = arcpy.Extent(extent.lowerLeft.X, extent.lowerLeft.Y, extent.upperRight.X, extent.upperRight.Y)
 
-
         # Extent-Koordinaten des Eingabe-Polygons
         min_x, min_y, max_x, max_y = extent.lowerLeft.X, extent.lowerLeft.Y, extent.upperRight.X, extent.upperRight.Y
-        edge_x = max_x - min_x #Kantenlängen
+        edge_x = max_x - min_x  # Kantenlängen
         edge_y = max_y - min_y
 
         # Liste zur Speicherung der Extents-Strings
@@ -304,7 +296,7 @@ class wfs_download:
             num_x = 1
             num_y = 1
 
-        # Fall 2 und 3 
+        # Fall 2 und 3
         else:
             # Ermittlung der Anzahl Zellen in X- und Y-Richtung
             if edge_x <= cell_size:
@@ -335,14 +327,16 @@ class wfs_download:
                     y2 = y1 + current_height
 
                     square = arcpy.Polygon(
-                        arcpy.Array([
-                            arcpy.Point(x1, y1),
-                            arcpy.Point(x2, y1),
-                            arcpy.Point(x2, y2),
-                            arcpy.Point(x1, y2),
-                            arcpy.Point(x1, y1)
-                        ]),
-                        spatial_ref
+                        arcpy.Array(
+                            [
+                                arcpy.Point(x1, y1),
+                                arcpy.Point(x2, y1),
+                                arcpy.Point(x2, y2),
+                                arcpy.Point(x1, y2),
+                                arcpy.Point(x1, y1),
+                            ]
+                        ),
+                        spatial_ref,
                     )
 
                     # Füge die Zelle nur hinzu, wenn sie das Input-Polygon schneidet
@@ -352,12 +346,13 @@ class wfs_download:
                         # Extents-String für das aktuelle Rechteck
                         bboxes.append(f"{x1},{y1},{x2},{y2}")
 
-        arcpy.AddMessage(f"Grid mit {num_x * num_y} Zellen (max. Kantenlänge {cell_size}m) erstellt und in {bbox_name} gespeichert.")
+        arcpy.AddMessage(
+            f"Grid mit {num_x * num_y} Zellen (max. Kantenlänge {cell_size}m) erstellt und in {bbox_name} gespeichert."
+        )
         return bboxes
 
-
     def download_wfs(self, grid, layer_list, work_dir, req_settings, polygon_fc):
-        '''
+        """
         Führt den Download von Layern vom WFS in Form von json-Dateien im durch die Bounding Boxen begrenzten Bereich durch
         und speichert diese in Feature Klassen in der übergebenen gdb
 
@@ -366,51 +361,51 @@ class wfs_download:
         :param work_dir: lokal ausgewählter Ordner für die json-files
         :param req_settings: Liste mit Einstellungen zum Request: [timeout(int), verify(boolean)]
         :param polygon_fc: Feature-Class des Eingabe-Polygons (zum Löschen von vollständig außerhalb liegenden Polygonen)
-        '''
+        """
 
         # Bounding Boxen
         arcpy.env.overwriteOutput = True
 
         # Layer downloaden
         for layer in layer_list:
-            
+
             wildcards = []
-                
-            for index,bbox in enumerate(grid):
+
+            for index, bbox in enumerate(grid):
                 layer_files = self.downloadJson(bbox, layer, work_dir, index, req_settings)
 
                 if layer_files:
-                    #für Filtern der Merge Feature Klassen und Benennung
+                    # für Filtern der Merge Feature Klassen und Benennung
                     for layer_file in layer_files:
-                        wildcard = "*"+ layer_file +"_*"
+                        wildcard = "*" + layer_file + "_*"
                         if not wildcard in wildcards:
                             wildcards.append(wildcard)
-                
+
             # Merge pro Geometrietyp durchführen
             for wildcard in wildcards:
                 fc = arcpy.ListFeatureClasses(wildcard)
-                #Extrahiere den Ausgabename ohne Geometrietyp bei gleichen Typen
-                parts = wildcard.rsplit('_', 2)
+                # Extrahiere den Ausgabename ohne Geometrietyp bei gleichen Typen
+                parts = wildcard.rsplit("_", 2)
                 output_fc = parts[0][1:]
-                #Mit Geometrietyp
-                if len(wildcards)>1:
+                # Mit Geometrietyp
+                if len(wildcards) > 1:
                     output_fc = wildcard[1:-2]
 
-
-                arcpy.Merge_management(fc,output_fc)
+                arcpy.Merge_management(fc, output_fc)
 
             # Alle Felder auflisten
             fields = arcpy.ListFields(output_fc)
             field_names = [field.name for field in fields]
-            
+
             identify_fields = ["Shape"]
-            for identity_field in config['identify_fields']:
+            for identity_field in config["identify_fields"]:
                 if identity_field in field_names:
                     identify_fields.append(identity_field)
-            
-            param = ";".join(identify_fields)
-            arcpy.DeleteIdentical_management(output_fc,"{0}".format(param))
 
+            param = ";".join(identify_fields)
+            arcpy.DeleteIdentical_management(output_fc, "{0}".format(param))
+
+            arcpy.AddField_management(in_table=output_fc, field_name="Abrufdatum", field_type="DATE")
 
             # Liste für die Feldzuordnung
             field_mappings = []
@@ -428,61 +423,68 @@ class wfs_download:
             # mit einem Updatecursor Attributwerte in temp-Felder übertragen
             if field_mappings:
                 cursor_fields = []
-                for old_field, new_field in field_mappings:
-                    cursor_fields.extend([new_field, old_field])
-                
+                for field, field_temp in field_mappings:
+                    cursor_fields.extend([field, field_temp])
+                    # cursor_fields.extend([new_field, old_field])
+                cursor_fields.append("Abrufdatum")
+
                 with arcpy.da.UpdateCursor(output_fc, cursor_fields) as cursor:
                     for row in cursor:
                         # Für jedes Paar (new_field, old_field) wird der Wert vom alten in das neue Feld kopiert.
-                        for i in range(0, len(cursor_fields), 2):
-                            row[i] = row[i + 1]
+                        for i in range(0, len(cursor_fields) - 1, 2):
+                            row[i + 1] = row[i]
+                        row[-1] = datetime.now()
                         cursor.updateRow(row)
 
                 # alte Felder löschen, temp-Felder umbenennen
-                for old_field, new_field in field_mappings:
-                    arcpy.DeleteField_management(output_fc, old_field)
-                    arcpy.AlterField_management(output_fc, new_field, new_field_name=old_field)
-                
-                arcpy.AddMessage(f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst.")
-        
+                for field, field_temp in field_mappings:
+                    arcpy.DeleteField_management(output_fc, field)
+                    arcpy.AlterField_management(output_fc, field_temp, new_field_name=field, new_field_alias=field)
+
+                arcpy.AddMessage(
+                    f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst."
+                )
+
             self.intersect(polygon_fc, output_fc)
 
     def getDifferentGeometryTypes(self, json_file):
-        '''
+        """
         Teilt Layer mit verschiedenen Geometrietypen auf
-        '''
+        """
         geometry_types = []
-        with open(json_file, 'r', encoding = "utf-8") as geojson_file:
+        with open(json_file, "r", encoding="utf-8") as geojson_file:
             geojson_data = json.load(geojson_file)
-            for feature in geojson_data['features']:
-                geometry_type = feature['geometry']['type']
+            for feature in geojson_data["features"]:
+                geometry_type = feature["geometry"]["type"]
                 if not geometry_type in geometry_types:
                     geometry_types.append(geometry_type)
-        return {"geometry_types":geometry_types, "geojson_data":geojson_data}
-        
+        return {"geometry_types": geometry_types, "geojson_data": geojson_data}
+
     def saveExtraJson(self, layer_name, geojson_data, geometry_type, work_dir):
-        '''
+        """
         Bei mehreren Geometrietypen werden die JSON-Daten separat gespeichert
-        '''
-        json_data = {"type": "FeatureCollection","features":[],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::25832"}}}
-        for feature in geojson_data['features']:
+        """
+        json_data = {
+            "type": "FeatureCollection",
+            "features": [],
+            "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::25832"}},
+        }
+        for feature in geojson_data["features"]:
             if feature["geometry"]["type"] == geometry_type:
                 json_data["features"].append(feature)
 
-
-        with open (work_dir+ os.sep+'{0}.json'.format(layer_name),"w", encoding="utf-8") as geometry_file:
-            json.dump(json_data,geometry_file)
-
+        with open(work_dir + os.sep + "{0}.json".format(layer_name), "w", encoding="utf-8") as geometry_file:
+            json.dump(json_data, geometry_file)
 
     def downloadJson(self, bbox, layer, work_dir, index, req_settings):
-        '''
+        """
         Führt den Download eines Rechteckes durch
 
         :param bbox: Bounding Box eines Rechteckes
         :param layer: zu downloadender Layer
         :param work_dir: lokal ausgewählter Ordner für die json-files
         :param index: iterieren der Dateinamen (bei mehr als einem Rechteck notwendig)
-        '''
+        """
         params = config["params_feature"]
         params["typename"] = layer
         params["bbox"] = bbox
@@ -491,60 +493,62 @@ class wfs_download:
         verify = req_settings[1]
 
         # Request ausführen
-        response = requests.get(self.url, params=params, timeout = timeout, verify = verify)
-    
-        v_al_layer = layer.replace(":", "_") #Doppelpunkt in Dateipfad unzulässig
+        response = requests.get(self.url, params=params, timeout=timeout, verify=verify)
+
+        v_al_layer = layer.replace(":", "_")  # Doppelpunkt in Dateipfad unzulässig
         layer_name = v_al_layer + "_" + str(index)
-        
+
         if not response.status_code == 200:
             arcpy.AddWarning(f"Error {response.status_code}: {response.reason} beim Downloadversuch des Layers {layer}")
             return
-        
-        #Datei speichern
-        json_file = work_dir+ os.sep+'{0}.json'.format(layer_name)
+
+        # Datei speichern
+        json_file = work_dir + os.sep + "{0}.json".format(layer_name)
         self.process_data.append(json_file)
-        with open(json_file, 'wb') as f:
+        with open(json_file, "wb") as f:
             f.write(response.content)
-        
-        #verschiedene Geometrietypen im JSON finden und auftrennen, wenn nötig --> v_al_vergleichsstueck
+
+        # verschiedene Geometrietypen im JSON finden und auftrennen, wenn nötig --> v_al_vergleichsstueck
         layer_files = []
         geometry_info = self.getDifferentGeometryTypes(json_file)
         geometry_types = geometry_info["geometry_types"]
         geojson_data = geometry_info["geojson_data"]
         arcpy.AddMessage(f"Der Layer {v_al_layer} enthält folgende Geometrietypen: {geometry_types}")
-    
+
         for geometry_type in geometry_types:
             layer_name_geometry = v_al_layer + "_" + geometry_type + "_" + str(index)
             if len(geometry_types) == 1:
-                arcpy.JSONToFeatures_conversion(json_file,layer_name_geometry)
-                layer_files.append(layer_name_geometry.rsplit('_',1)[0])
-        
-            #in getrennte Dateien schreiben und dann erst in Feature Class konvertieren
-            elif len(geometry_types)>1:       
-                self.saveExtraJson(layer_name_geometry,geojson_data,geometry_type,work_dir)    
+                arcpy.JSONToFeatures_conversion(json_file, layer_name_geometry)
+                layer_files.append(layer_name_geometry.rsplit("_", 1)[0])
 
-                arcpy.JSONToFeatures_conversion(work_dir+ os.sep+'{0}.json'.format(layer_name_geometry),layer_name_geometry)
-                #Dateiname für später ohne Bounding Box Info (nötig, weil sonst der Zusatz Geometrietyp fehlt)
-                layer_files.append( layer_name_geometry.rsplit('_',1)[0])
-                
-                #Ursprünglich Downgeloadete Daten mit beiden FeatureTypes löschen, sonst Verwirrung
+            # in getrennte Dateien schreiben und dann erst in Feature Class konvertieren
+            elif len(geometry_types) > 1:
+                self.saveExtraJson(layer_name_geometry, geojson_data, geometry_type, work_dir)
+
+                arcpy.JSONToFeatures_conversion(
+                    work_dir + os.sep + "{0}.json".format(layer_name_geometry), layer_name_geometry
+                )
+                # Dateiname für später ohne Bounding Box Info (nötig, weil sonst der Zusatz Geometrietyp fehlt)
+                layer_files.append(layer_name_geometry.rsplit("_", 1)[0])
+
+                # Ursprünglich Downgeloadete Daten mit beiden FeatureTypes löschen, sonst Verwirrung
                 arcpy.Delete_management(layer_name)
 
-            #fügt Namen der erzeugten Feature Class einer Liste hinzu, zum Löschen (je nach Checkbox) der temporären Daten
+            # fügt Namen der erzeugten Feature Class einer Liste hinzu, zum Löschen (je nach Checkbox) der temporären Daten
             self.process_fc.append(layer_name_geometry)
 
         arcpy.AddMessage(f"Layer {v_al_layer} erfolgreich gedownloaded und als json-file in {work_dir} gespeichert")
 
         return layer_files
-    
+
     def intersect(self, polygon_fc, output_fc):
-        '''
+        """
         Löscht alle Polygone des outputs des wfs, die vollständig außerhalb des Eingabe-Fensters liegen
         (Aufgrund des Abrufs der wfs-Daten mit der Bounding-Box wird in der Regel deutlich über den Eingabe-Bereich abgerufen und gedownloaded)
 
         :param polygon_fc: Feature-Class des Eingabe-Polygons
         :param output_fc: Feature-Class des Downloads des WFS
-        '''
+        """
         input_lyr = "lyr_input_tmp"
         arcpy.MakeFeatureLayer_management(polygon_fc, input_lyr)
         output_lyr = "lyr_output_tmp"
@@ -555,11 +559,13 @@ class wfs_download:
             overlap_type="INTERSECT",
             select_features=input_lyr,
             selection_type="NEW_SELECTION",
-            invert_spatial_relationship="INVERT"
+            invert_spatial_relationship="INVERT",
         )
 
         arcpy.DeleteFeatures_management(output_lyr)
         arcpy.Delete_management(input_lyr)
         arcpy.Delete_management(output_lyr)
 
-        arcpy.AddMessage(f"Abgerufene Daten des WFS-Dienstes, die vollständig außerhalb von {polygon_fc} liegen, wurden entfernt.")
+        arcpy.AddMessage(
+            f"Abgerufene Daten des WFS-Dienstes, die vollständig außerhalb von {polygon_fc} liegen, wurden entfernt."
+        )
