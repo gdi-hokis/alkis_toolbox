@@ -17,16 +17,12 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
 
-from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 import os
 import json
 from datetime import datetime
 import requests
-import json
-import requests
 import arcpy
-from requests.exceptions import ConnectionError, HTTPError, Timeout, RequestException
 
 # Konfigurationsparameter
 config = {
