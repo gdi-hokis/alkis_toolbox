@@ -219,7 +219,7 @@ class wfs_download:
         grid = self.create_grid_from_polygon(polygon_fc, gdb_param, cell_size)
 
         # Schritt 2: Wfs im Bereich der Bounding Boxen downloaden
-        self.download_wfs(grid, layer_list,gdb_param, work_dir, req_settings, polygon_fc)
+        self.download_wfs(grid, layer_list, gdb_param, work_dir, req_settings, polygon_fc)
 
         # Schritt 3: Verarbeitungsdaten wieder entfernen
         if checkbox is False:
@@ -438,23 +438,19 @@ class wfs_download:
                     arcpy.DeleteField_management(output_fc, field)
                     arcpy.AlterField_management(output_fc, field_temp, new_field_name=field, new_field_alias=field)
 
-            output_fc_2D = output_fc + '_tmp'
+            output_fc_2D = output_fc + "_tmp"
             arcpy.env.outputZFlag = "Disabled"
             arcpy.env.outputMFlag = "Disabled"
 
-            arcpy.FeatureClassToFeatureClass_conversion(
-                in_features=output_fc,
-                out_path=gdb,
-                out_name=output_fc_2D
-            )
+            arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=gdb, out_name=output_fc_2D)
 
             arcpy.Delete_management(output_fc)
             arcpy.Rename_management(output_fc_2D, output_fc)
 
             arcpy.AddMessage("Z-Werte wurden entfernt")
-                arcpy.AddMessage(
-                    f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst."
-                )
+            arcpy.AddMessage(
+                f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst."
+            )
 
             self.intersect(polygon_fc, output_fc)
 
