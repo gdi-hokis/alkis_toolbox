@@ -260,7 +260,10 @@ class wfs_download:
         spatial_ref = arcpy.Describe(polygon_fc).spatialReference
 
         # Output-Feature-Class in definierter gdb neu anlegen
-        bbox_name = arcpy.Describe(polygon_fc).name + "_bbox"
+        fc_name = arcpy.Describe(polygon_fc).name
+        if "." in fc_name:
+            fc_name = fc_name.split(".")[0]
+        bbox_name = fc_name + "_bbox"
         bbox_fc = os.path.join(gdb, bbox_name)
 
         # bei Nichtanhaken Löschen der temporären Daten
