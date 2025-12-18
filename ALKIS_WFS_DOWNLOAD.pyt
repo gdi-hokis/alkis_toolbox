@@ -49,7 +49,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält ein Tool, das ALKIS-Daten im definierten Bereich als GeoJSON herunterlädt und diese in eine FGDB konvertiert"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download]
+        self.tools = [wfs_download, alkis_eigentuemer]
 
 
 class wfs_download:
@@ -579,3 +579,170 @@ class wfs_download:
         arcpy.AddMessage(
             f"Abgerufene Daten des WFS-Dienstes, die vollständig außerhalb von {polygon_fc} liegen, wurden entfernt."
         )
+
+
+
+class alkis_eigentuemer:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "alkis_eigentuemer"
+        self.alias = "alkis_eigentuemer"
+        self.description = "Dieses Tool verknüpft Eigentümerdaten aus einer csv-Datei mit ALKIS-Daten"
+
+    def getParameterInfo(self):
+        """Define parameter definitions"""
+        
+        param0 = arcpy.Parameter(
+            displayName="Ziel-Geodatabase wählen",
+            name="existing_geodatabase",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        param1 = arcpy.Parameter(
+            displayName="Pfad zur ALKIS-Eigentümer CSV-Datei",
+            name="alkis_csv",
+            datatype="DEFile",
+            parameterType="Required",
+            direction="Input",
+        )
+        param1.filter.list = ["csv"]
+
+        param2 = arcpy.Parameter(
+            displayName="Feature Class Gemeinden",
+            name="feature_class_gemeinden",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param2.filter.list = ["Polygon"]
+
+        param3 = arcpy.Parameter(
+            displayName="Feature Class Flurstücke",
+            name="feature_class_flurstuecke",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.filter.list = ["Polygon"]
+
+        param4 = arcpy.Parameter(
+            displayName="Endergebnis Tabelle Eigentümer",
+            name="endresult_table_eigentuemer",
+            datatype="DETable",
+            parameterType="Required",
+            direction="Output"
+        )
+        
+
+        params = [param0, param1, param2, param3, param4]
+        return params
+
+    def isLicensed(self):
+        """Set whether tool is licensed to execute."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal
+        validation is performed.  This method is called whenever a parameter
+        has been changed."""
+        return
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        gdb = parameters[0]
+        alkis_csv = parameters[1]
+        fc_gemeinden = parameters[2]
+        fc_flurstuecke = parameters[3]
+        output_table = parameters[4]
+
+        # Prüfen ob Geodatabase ausgewählt wurde (bei Datentyp "DEWorkspace" theoretisch Auswahl eines Ordners möglich)
+        if gdb.value:
+            workspace_path = gdb.valueAsText
+            # Prüfen, ob der Pfad nicht auf ".gdb" endet
+            if not workspace_path.lower().endswith(".gdb"):
+                gdb.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
+
+        # Prüfen ob eine CSV-Datei ausgewählt wurde
+        # redundant durch Filter, bei händischer Eingabe des Pfades benötigt
+        if alkis_csv.value:
+            csv_path = alkis_csv.valueAsText
+            # Prüfen, ob der Pfad nicht auf ".csv" endet
+            if not csv_path.lower().endswith(".csv"):
+                alkis_csv.setErrorMessage("Bitte wählen Sie eine CSV-Datei (.csv) aus.")
+            # Prüfen ob CSV-Datei existiert
+            elif not os.path.exists(csv_path):
+                alkis_csv.setErrorMessage(f"Die CSV-Datei existiert nicht: {csv_path}")
+            # Prüfen ob CSV-Datei lesbar ist
+            elif not os.access(csv_path, os.R_OK):
+                alkis_csv.setErrorMessage(f"Die CSV-Datei kann nicht gelesen werden (fehlende Leserechte): {csv_path}")
+            # Prüfen ob CSV-Datei leer ist
+            elif os.path.getsize(csv_path) == 0:
+                alkis_csv.setErrorMessage("Die CSV-Datei ist leer.")
+
+        # Prüfen ob Feature Class Gemeinden das Feld "flstkey" enthält
+        if fc_gemeinden.value:
+            try:
+                fields = [f.name.lower() for f in arcpy.ListFields(fc_gemeinden.value)]
+                if "gemeinde_name" not in fields:
+                    fc_gemeinden.setWarningMessage("Die Feature Class enthält kein Feld 'gemeinde_name'. Bitte prüfen Sie die Datenstruktur.")
+            except:
+                pass  # Falls ListFields fehlschlägt, ignorieren (z.B. bei ungültigem Layer)
+
+        # Prüfen ob Feature Class Flurstücke das Feld "flstkey" enthält
+        if fc_flurstuecke.value:
+            try:
+                fields = [f.name.lower() for f in arcpy.ListFields(fc_flurstuecke.value)]
+                if "flstkey" not in fields:
+                    fc_flurstuecke.setErrorMessage("Die Feature Class muss ein Feld 'flstkey' enthalten.")
+            except:
+                pass  # Falls ListFields fehlschlägt, ignorieren
+
+        # Prüfen ob Output-Tabelle in einer Geodatabase angelegt wird
+        if output_table.value:
+            output_path = output_table.valueAsText
+            # Prüfen, ob der Pfad eine .gdb enthält
+            if ".gdb" not in output_path.lower():
+                output_table.setErrorMessage("Die Ausgabetabelle muss in einer File-Geodatabase (.gdb) erstellt werden.")
+            else:
+                # Extrahiere den GDB-Pfad und Tabellennamen
+                if os.sep in output_path or "/" in output_path:
+                    gdb_path = output_path.lower().split(".gdb")[0] + ".gdb"
+                    table_name = os.path.basename(output_path)
+
+                    # Prüfen ob die GDB existiert
+                    if not arcpy.Exists(gdb_path):
+                        output_table.setWarningMessage(f"Die Geodatabase existiert noch nicht: {gdb_path}")
+
+                    # Prüfen ob Tabellenname gültig ist (keine Dateiendungen erlaubt)
+                    if not table_name:
+                        output_table.setErrorMessage("Bitte geben Sie einen Tabellennamen an.")
+                    elif "." in table_name:
+                        output_table.setErrorMessage("Der Tabellenname darf keine Dateiendung (z.B. .txt, .csv) enthalten.")
+                    elif " " in table_name:
+                        output_table.setErrorMessage("Der Tabellenname darf keine Leerzeichen enthalten.")
+                    elif not table_name[0].isalpha() and table_name[0] != "_":
+                        output_table.setErrorMessage("Der Tabellenname muss mit einem Buchstaben oder Unterstrich beginnen.")
+                    # Prüfen auf Sonderzeichen (nur Buchstaben, Zahlen und Unterstrich erlaubt)
+                    elif not all(c.isalnum() or c == "_" for c in table_name):
+                        output_table.setErrorMessage("Der Tabellenname darf nur Buchstaben, Zahlen und Unterstriche enthalten.")
+                    # Prüfen auf maximale Länge (File-GDB Limit: 160 Zeichen, aber 64 ist sicherer)
+                    elif len(table_name) > 64:
+                        output_table.setErrorMessage(f"Der Tabellenname ist zu lang ({len(table_name)} Zeichen). Maximum: 64 Zeichen.")
+                    # Warnung bei existierender Tabelle
+                    elif arcpy.Exists(output_path):
+                        output_table.setWarningMessage(f"Die Tabelle '{table_name}' existiert bereits und wird überschrieben.")
+
+        return
+
+    def execute(self, parameters, messages):
+        """The source code of the tool."""
+        pass
+        return
+
+    def postExecute(self, parameters):
+        """This method takes place after outputs are processed and
+        added to the display."""
+        return
