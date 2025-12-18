@@ -23,6 +23,7 @@ import json
 from datetime import datetime
 import requests
 import arcpy
+import copy_alkis_eigentuemer
 
 # Konfigurationsparameter
 config = {
@@ -739,7 +740,23 @@ class alkis_eigentuemer:
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        pass
+        # Get Parameters
+        gdb = parameters[0].valueAsText
+        alkis_csv = parameters[1].valueAsText
+        fc_gemeinden = parameters[2].value
+        fc_flurstuecke = parameters[3].value
+        output_table = parameters[4].valueAsText
+
+        abrufdatum = datetime.now().strftime("%d.%m.%Y")
+        
+        arcpy.env.workspace = gdb
+        
+        # Temporäre CSV vorbereiten
+        prepared_csv = os.path.join(os.path.dirname(alkis_csv), "prepared_" + os.path.basename(alkis_csv))
+        
+        # Schritt 1: Eigentümer Tabelle erstellen
+        copy_alkis_eigentuemer.MakeEigentuemerTable(fc_gemeinden, fc_flurstuecke, alkis_csv, prepared_csv, gdb, abrufdatum)
+        
         return
 
     def postExecute(self, parameters):
