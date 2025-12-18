@@ -1,0 +1,33 @@
+{
+	"kreis": "Hohenlohekreis",
+	"work_dir": "E://ALKIS_2024",
+	"scripts_path": "E://ALKIS_2024/scripts",
+	"orig_sde": "E://ALKIS_2024/Aprx/alkis_nora.sde",
+	"update_gdb": "O://ALKIS_UPDATE/alkis_update_2024/alkis_nora.gdb",
+	"download_wfs": {
+		"wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
+		"params_capabilities": {
+			"service": "WFS",
+			"request": "GetCapabilities",
+			"version": "2.0.0"
+		},
+		"params_feature": {
+			"service": "WFS",
+			"request": "GetFeature",
+			"version": "2.0.0",
+			"outputFormat": "json"
+		},
+		"bounding_boxes": [
+			{ "left": 524056, "right": 563187, "top": 5476145, "bottom": 5457455 },
+			{ "left": 524056, "right": 563187, "top": 5457455, "bottom": 5437607 }
+		],
+		"exception_layers": ["v_al_zuordnung_lagebezeichnung"],
+		"identify_fields": ["gml_id", "gesamtschluessel"]
+	},
+	"database_connection": "DRIVER={PostgreSQL ODBC Driver(UNICODE)};DATABASE=alkis_nora;UID=postgres;PWD=H4fIUAm3FL0W;SERVER=localhost;PORT=5432;",
+	"gemeinden": [
+		8126045, 8126020, 8126056, 8126072, 8126039, 8126046, 8126086, 8126060, 8126028, 8126047, 8126058, 8126085, 8126094,
+		8126066, 8126069, 8126011
+	],
+	"subproc_sfl": "E://ALKIS_2024/scripts/calc_sfl_subprocess.py"
+}
