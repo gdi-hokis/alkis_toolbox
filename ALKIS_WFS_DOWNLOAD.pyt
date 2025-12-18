@@ -21,8 +21,17 @@ from xml.etree import ElementTree as ET
 import os
 import json
 from datetime import datetime
+import time
 import requests
 import arcpy
+import importlib
+import wfs_field_calculations
+import calc_lage
+import calc_sfl_optimized
+
+importlib.reload(calc_lage)
+importlib.reload(calc_sfl_optimized)
+
 
 # Konfigurationsparameter
 config = {
@@ -46,10 +55,173 @@ class Toolbox:
         .pyt file)."""
         self.label = "ALKIS WFS Download"
         self.alias = "ALKISWFSDownload"
-        self.description = "Diese Toolbox enthält ein Tool, das ALKIS-Daten im definierten Bereich als GeoJSON herunterlädt und diese in eine FGDB konvertiert"
+        self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download]
+        self.tools = [wfs_download, calc_lage_tool, calc_sfl]
+
+
+class calc_lage_tool:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Lagebezeichnungen zuordnen"
+        self.description = "Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine Navigation_Lage Tabelle"
+
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Ziel-Geodatabase wählen",
+            name="existing_geodatabase",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        param1 = arcpy.Parameter(
+            displayName="Arbeitsdatenbank für temporäre Daten",
+            name="workspace_database",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        params = [param0, param1]
+        return params
+
+    def isLicensed(self):
+        """Set whether the tool is licensed to execute."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal validation is performed."""
+        return
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool parameter."""
+        workspace_param = parameters[0]
+
+        if workspace_param.value:
+            workspace_path = workspace_param.valueAsText
+            if not workspace_path.lower().endswith(".gdb"):
+                workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
+        return
+
+    def execute(self, parameters, _messages):
+        gdb_path = parameters[0].valueAsText
+        work_folder = parameters[1].valueAsText
+
+        try:
+            arcpy.AddMessage(f"Starte Lagebezeichnungsberechnung für {gdb_path}")
+
+            success = calc_lage.calculate_lage(work_folder, gdb_path)
+
+            if success:
+                arcpy.AddMessage("Lagebezeichnungsberechnung erfolgreich abgeschlossen")
+            else:
+                arcpy.AddError("Lagebezeichnungsberechnung fehlgeschlagen")
+
+            return success
+
+        except Exception as e:
+            arcpy.AddError(f"Fehler bei Lagebezeichnungsberechnung: {str(e)}")
+            import traceback
+
+            arcpy.AddError(traceback.format_exc())
+            return False
+
+
+class calc_sfl:
+    """
+    ArcGIS Toolbox Tool für SFL- und EMZ-Berechnung (optimierte Version).
+    """
+
+    def __init__(self):
+        self.label = "SFL & EMZ Berechnung (optimiert)"
+        self.description = """
+        Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) 
+        mit optimierter Pandas-Vectorisierung (~5-10x schneller).
+        """
+        self.canRunInBackground = True
+
+    def getParameterInfo(self):
+        """Definiert die Tool-Parameter."""
+
+        # Parameter 1: GDB Path
+        param0 = arcpy.Parameter(
+            displayName="Geodatabase",
+            name="gdb_path",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["File Geodatabase"]
+
+        # Parameter 2: Workspace
+        param1 = arcpy.Parameter(
+            displayName="Arbeitsdatenbank",
+            name="workspace",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        # Parameter 5: Output Message
+        param2 = arcpy.Parameter(
+            displayName="Ergebnis",
+            name="output",
+            datatype="GPString",
+            parameterType="Derived",
+            direction="Output",
+        )
+
+        return [param0, param1, param2]
+
+    def isLicensed(self):
+        """Lizenzprüfung."""
+        # Keine speziellen Extensions erforderlich
+        return True
+
+    def updateParameters(self, parameters):
+        """Aktualisiere Parameter wenn sich andere Parameter ändern."""
+        pass
+
+    def updateMessages(self, parameters):
+        """Validiere Parameter."""
+        pass
+
+    def execute(self, parameters, messages):
+        """Hauptlogik des Tools."""
+
+        try:
+            # Parse Parameter
+            gdb_path = parameters[0].valueAsText
+            workspace = parameters[1].valueAsText
+
+            arcpy.AddMessage("\n" + "=" * 70)
+            arcpy.AddMessage("SFL & EMZ BERECHNUNG - OPTIMIERTE VERSION")
+            arcpy.AddMessage("=" * 70)
+
+            arcpy.AddMessage("\nStarte OPTIMIERTE Berechnung...")
+            success = calc_sfl_optimized.calculate_sfl_optimized(gdb_path, workspace)
+
+            if not success:
+                arcpy.AddError("Berechnung fehlgeschlagen!")
+                parameters[2].value = "✗ FEHLER"
+                return
+
+            arcpy.AddMessage("\n" + "=" * 70)
+            arcpy.AddMessage("✓ BERECHNUNG ABGESCHLOSSEN")
+            arcpy.AddMessage("=" * 70)
+
+            # Output
+            parameters[2].value = "✓ Erfolgreich abgeschlossen"
+
+        except Exception as e:
+            arcpy.AddError(f"Fehler: {str(e)}")
+            import traceback
+
+            arcpy.AddError(traceback.format_exc())
+            parameters[2].value = f"✗ Fehler: {str(e)}"
 
 
 class wfs_download:
@@ -196,7 +368,7 @@ class wfs_download:
         checked_layers = parameters[1].valueAsText  # semicolon separated string
         gdb_param = parameters[2].valueAsText
         arcpy.env.workspace = parameters[2].valueAsText
-        work_dir = parameters[3].valueasText
+        work_dir = parameters[3].valueAsText
         checkbox = parameters[4].value
         cell_size = parameters[5].value
         timeout = parameters[6].value
@@ -407,55 +579,28 @@ class wfs_download:
 
             arcpy.AddField_management(in_table=output_fc, field_name="Abrufdatum", field_type="DATE")
 
-            # Liste für die Feldzuordnung
-            field_mappings = []
-
-            # Feldlänge der Felder mit Dateityp String von 20000000 auf 255 kürzen
-            e = 0
-            # neues temp-Feld anlegen und Layername zu Liste hinzufügen
-            for field in fields:
-                if field.type == "String" and field.length > 255:
-                    new_field = field.name + "_temp"
-                    arcpy.AddField_management(output_fc, new_field, "TEXT", field_length=255)
-                    field_mappings.append((field.name, new_field))
-                    e += 1
-
-            # mit einem Updatecursor Attributwerte in temp-Felder übertragen
-            if field_mappings:
-                cursor_fields = []
-                for field, field_temp in field_mappings:
-                    cursor_fields.extend([field, field_temp])
-                    # cursor_fields.extend([new_field, old_field])
-                cursor_fields.append("Abrufdatum")
-
-                with arcpy.da.UpdateCursor(output_fc, cursor_fields) as cursor:
-                    for row in cursor:
-                        # Für jedes Paar (new_field, old_field) wird der Wert vom alten in das neue Feld kopiert.
-                        for i in range(0, len(cursor_fields) - 1, 2):
-                            row[i + 1] = row[i]
-                        row[-1] = datetime.now()
-                        cursor.updateRow(row)
-
-                # alte Felder löschen, temp-Felder umbenennen
-                for field, field_temp in field_mappings:
-                    arcpy.DeleteField_management(output_fc, field)
-                    arcpy.AlterField_management(output_fc, field_temp, new_field_name=field, new_field_alias=field)
+            self.shorten_string_fields(output_fc, fields)
 
             output_fc_2D = output_fc + "_tmp"
             arcpy.env.outputZFlag = "Disabled"
             arcpy.env.outputMFlag = "Disabled"
 
+            arcpy.AddMessage(f"Start: FeatureClassToFeatureClass_conversion (2D-Konvertierung)...")
+            fc_start = time.time()
             arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=gdb, out_name=output_fc_2D)
+            fc_time = time.time() - fc_start
+            arcpy.AddMessage(f"2D-Konvertierung abgeschlossen in {fc_time:.2f} Sekunden")
 
             arcpy.Delete_management(output_fc)
             arcpy.Rename_management(output_fc_2D, output_fc)
 
             arcpy.AddMessage("Z-Werte wurden entfernt")
-            arcpy.AddMessage(
-                f"In der Feature Class {output_fc} wurden {e} Felder des Datentyps Text auf die Länge 255 angepasst."
-            )
 
             self.intersect(polygon_fc, output_fc)
+        # Feldberechnungen für spezifische Layer durchführen
+        fc = arcpy.ListFeatureClasses()
+        for output_fc in fc:
+            self.perform_field_calculations(output_fc, gdb)
 
     def getDifferentGeometryTypes(self, json_file):
         """
@@ -550,6 +695,117 @@ class wfs_download:
         arcpy.AddMessage(f"Layer {v_al_layer} erfolgreich gedownloaded und als json-file in {work_dir} gespeichert")
 
         return layer_files
+
+    def shorten_string_fields(self, output_fc, fields):
+
+        # Liste für die Feldzuordnung
+        field_mappings = []
+
+        # Feldlänge der Felder mit Dateityp String von 20000000 auf 255 kürzen
+        e = 0
+        # neues temp-Feld anlegen und Layername zu Liste hinzufügen
+        # Felder sammeln, die hinzugefügt werden sollen (nur neue Temp-Felder)
+        fields_to_add = []
+
+        for field in fields:
+            if field.type == "String" and field.length > 255:
+                new_field = field.name + "_temp"
+
+                # AddFields erwartet: [name, type, precision, scale, length]
+                fields_to_add.append([new_field, "TEXT", "", 255])
+
+                # Deine bestehende Zuordnung bleibt unverändert
+                field_mappings.append((field.name, new_field))
+
+                e += 1
+        if fields_to_add:
+            arcpy.management.AddFields(output_fc, fields_to_add)
+
+        if field_mappings:
+            arcpy.AddMessage(f"Start: Kopiere {e} Felder mit {len(field_mappings)} Feldpaaren in {output_fc}...")
+
+            start_time = time.time()
+
+            cursor_fields = []
+            for field, field_temp in field_mappings:
+                cursor_fields.extend([field, field_temp])
+            cursor_fields.append("Abrufdatum")
+
+            row_count = 0
+            with arcpy.da.UpdateCursor(output_fc, cursor_fields) as cursor:
+                for row in cursor:
+                    # Für jedes Paar (new_field, old_field) wird der Wert vom alten in das neue Feld kopiert.
+                    for i in range(0, len(cursor_fields) - 1, 2):
+                        row[i + 1] = row[i]
+                    row[-1] = datetime.now()
+                    cursor.updateRow(row)
+                    row_count += 1
+
+            cursor_time = time.time() - start_time
+            arcpy.AddMessage(
+                f"UpdateCursor abgeschlossen: {row_count} Zeilen in {cursor_time:.2f} Sekunden ({row_count/cursor_time:.0f} Zeilen/Sek)"
+            )
+
+            # alte Felder löschen, temp-Felder umbenennen
+            arcpy.AddMessage(f"Start: Lösche alte Felder und benenne {e} Felder um...")
+            delete_start = time.time()
+
+            # alte Felder löschen, temp-Felder umbenennen
+            fields_to_delete = [field for field, _ in field_mappings]
+            arcpy.DeleteField_management(output_fc, ";".join(fields_to_delete))  # EINE Operation!
+
+            # Dann umbenennen (leider muss das einzeln, aber schneller weil FC kleiner):
+            for field, field_temp in field_mappings:
+                arcpy.AlterField_management(output_fc, field_temp, new_field_name=field)
+
+            delete_time = time.time() - delete_start
+            arcpy.AddMessage(f"Feldoperationen abgeschlossen in {delete_time:.2f} Sekunden")
+
+    def perform_field_calculations(self, output_fc, gdb):
+        """
+        Führt spezifische Feldberechnungen für die heruntergeladenen Layer durch.
+        Behandelt:
+        - v_al_flurstueck: Flurnummer-ID, FSK, FLSTKEY, locator_place
+        - v_al_bodenschaetzung_f: Label-Beschriftung
+        - v_al_gebaeude: object_id UUID
+
+        :param output_fc: Name der Feature Class
+        :param gdb: Geodatabase-Pfad
+        """
+        try:
+            output_fc_path = os.path.join(gdb, output_fc)
+
+            # Flurstücke - Feldberechnungen
+            if output_fc == "nora_v_al_flurstueck":
+                arcpy.AddMessage("Starte Feldberechnungen für Flurstücke...")
+
+                # Flurnummer-Berechnung benötigt auch v_al_flur
+                if arcpy.Exists(os.path.join(gdb, "nora_v_al_flur")):
+                    flur_fc_path = os.path.join(gdb, "nora_v_al_flur")
+                    wfs_field_calculations.calculate_flurnummer_l(flur_fc_path, output_fc_path)
+                    wfs_field_calculations.join_flurnamen(output_fc_path, flur_fc_path)
+                    wfs_field_calculations.calculate_locator_place(output_fc_path)
+                    wfs_field_calculations.clean_up_flur_fields(flur_fc_path)
+
+                # FSK und FLSTKEY
+                wfs_field_calculations.calculate_fsk(output_fc_path)
+                wfs_field_calculations.calculate_flstkey(output_fc_path)
+                arcpy.AddMessage("Feldberechnungen für Flurstücke abgeschlossen")
+
+            # Bodenschätzung - Label-Berechnung
+            elif output_fc == "nora_v_al_bodenschaetzung_f":
+                arcpy.AddMessage("Starte Feldberechnungen für Bodenschätzung...")
+                wfs_field_calculations.calculate_label_bodensch(output_fc_path)
+                arcpy.AddMessage("Feldberechnungen für Bodenschätzung abgeschlossen")
+
+            # Gebäude - object_id Generierung
+            elif output_fc == "nora_v_al_gebaeude":
+                arcpy.AddMessage("Starte Feldberechnungen für Gebäude...")
+                wfs_field_calculations.calculate_gebaeude_object_id(output_fc_path)
+                arcpy.AddMessage("Feldberechnungen für Gebäude abgeschlossen")
+
+        except Exception as e:
+            arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")
 
     def intersect(self, polygon_fc, output_fc):
         """
