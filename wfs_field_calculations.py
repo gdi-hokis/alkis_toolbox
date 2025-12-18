@@ -23,7 +23,6 @@ Enthält Funktionen für Berechnungen auf v_al_flurstueck, v_al_bodenschaetzung_
 """
 
 import arcpy
-import os
 
 
 def calculate_flurnummer_l(flur_fc, flurstueck_fc):
