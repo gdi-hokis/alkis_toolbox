@@ -24,12 +24,9 @@ from datetime import datetime
 import time
 import requests
 import arcpy
-<<<<<<< HEAD
 import copy_alkis_eigentuemer
-=======
 import importlib
 
->>>>>>> d1c92e95b36576451487a658dde19068e0e7eb40
 
 # Konfigurationsparameter
 config = {
@@ -56,10 +53,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-<<<<<<< HEAD
-        self.tools = [wfs_download, alkis_eigentuemer]
-=======
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl]
+        self.tools = [wfs_download, calc_lage_tool, calc_sfl, alkis_eigentuemer]
 
 
 class calc_lage_tool:
@@ -229,7 +223,6 @@ class calc_sfl:
 
             arcpy.AddError(traceback.format_exc())
             parameters[2].value = f"✗ Fehler: {str(e)}"
->>>>>>> d1c92e95b36576451487a658dde19068e0e7eb40
 
 
 class wfs_download:
