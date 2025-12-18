@@ -58,7 +58,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calculate_sfl_tool, CompareFeatureClasses, SFLCalculationTool]
+        self.tools = [wfs_download, calc_lage_tool, calc_sfl, compare_feature_classes]
 
 
 class calc_lage_tool:
@@ -130,7 +130,7 @@ class calc_lage_tool:
             return False
 
 
-class CompareFeatureClasses(object):
+class compare_feature_classes(object):
     def __init__(self):
         self.label = "Feature-Klassen vergleichen"
         self.description = "Vergleicht zwei Feature-Klassen anhand von drei Feldern und speichert Unterschiede in einer neuen Feature-Class."
@@ -255,7 +255,7 @@ class CompareFeatureClasses(object):
         )
 
 
-class SFLCalculationTool:
+class calc_sfl:
     """
     ArcGIS Toolbox Tool für SFL- und EMZ-Berechnung (optimierte Version).
     """
@@ -347,77 +347,6 @@ class SFLCalculationTool:
 
             arcpy.AddError(traceback.format_exc())
             parameters[2].value = f"✗ Fehler: {str(e)}"
-
-
-class calculate_sfl_tool:
-    def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
-        self.label = "SFL- und EMZ-Berechnung"
-        self.description = (
-            "Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) für Nutzungs- und Bodenschätzungsflächen"
-        )
-
-    def getParameterInfo(self):
-        """Define the tool parameters."""
-        param0 = arcpy.Parameter(
-            displayName="Ziel-Geodatabase wählen",
-            name="existing_geodatabase",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank für temporäre Daten",
-            name="workspace_folder",
-            datatype="DEFolder",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        params = [param0, param1]
-        return params
-
-    def isLicensed(self):
-        """Set whether the tool is licensed to execute."""
-        return True
-
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal validation is performed."""
-        return
-
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool parameter."""
-        workspace_param = parameters[0]
-
-        if workspace_param.value:
-            workspace_path = workspace_param.valueAsText
-            if not workspace_path.lower().endswith(".gdb"):
-                workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
-        return
-
-    def execute(self, parameters, _messages):
-        gdb_path = parameters[0].valueAsText
-        work_folder = parameters[1].valueAsText
-
-        try:
-            arcpy.AddMessage(f"Starte SFL- und EMZ-Berechnung für {gdb_path}")
-
-            success = calc_sfl.calculate_sfl(gdb_path, work_folder)
-
-            if success:
-                arcpy.AddMessage("SFL- und EMZ-Berechnung erfolgreich abgeschlossen")
-            else:
-                arcpy.AddError("SFL- und EMZ-Berechnung fehlgeschlagen")
-
-            return success
-
-        except Exception as e:
-            arcpy.AddError(f"Fehler bei SFL- und EMZ-Berechnung: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            return False
 
 
 class wfs_download:

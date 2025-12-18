@@ -41,7 +41,7 @@ class SFLCalculatorOptimized:
         self.max_shred_qm = 5  # Schwellenwert für Kleinstflächen
 
         # DEBUG: Logging nur für FSK 080258
-        self.debug_fsk = "08025800002862000200"
+        self.debug_fsk = "080280"
         self.debug_log = []
 
         arcpy.env.workspace = self.workspace
@@ -467,8 +467,7 @@ class SFLCalculatorOptimized:
             df["sfl"] = (df["geom_area"] * df["verbesserung"] + 0.5).astype(int)
 
             # Kleinstflächen-Filterung pro FSK
-            # Marke Kleinstflächen mit NaN wenn: area < 2 qm AND fsk_afl > 10 qm
-            mask_mini = (df["geom_area"] < 2) & (df["amtliche_flaeche"] > 10)
+            mask_mini = (df["geom_area"] < 2) & (df["amtliche_flaeche"] > 5)
             df.loc[mask_mini, "is_mini"] = True
             df.loc[~mask_mini, "is_mini"] = False
 
@@ -478,11 +477,36 @@ class SFLCalculatorOptimized:
 
             arcpy.AddMessage(f"  Identifiziert {len(df_mini)} Kleinstflächen zur Verarbeitung")
 
-            # Merge Mini-Flächen mit angrenzenden Hauptflächen (simplified approach)
-            # Hinweis: Für komplexe Geometrie-Union brauchst du Spatial Index
-            # Hier: Groupiere pro FSK und mache vereinfachte Union
-            if len(df_mini) > 0 and SHAPELY_AVAILABLE:
-                df_main = self._merge_mini_into_main_nutzung(df_main, df_mini)
+            # Mini-Flächen-Filterung: Nur die merge'en, die WENIGER als 1 m² bei Verteilung ergeben
+            # Prüfe ohne +0.5: geom_area * verbesserung < 1
+            if len(df_mini) > 0:
+                # df[]=np.round(df["geom_area"] * df["verbesserung"]).astype(int)
+                # Trennung: erhaltungswürdig (>= 1) vs. zu mergen (< 1)
+                mask_keep = df_mini["sfl"] >= 1
+                df_mini["perimeter"] = df_mini["geometry"].apply(lambda geom: geom.length)
+                df_mini["form_index"] = df_mini["perimeter"] / np.sqrt(df_mini["geom_area"])
+
+                # Schmale, lange Schnipsel filtern (form_index > 8 = sehr dünn)
+                mask_real_feature = df_mini["form_index"] < 8  # Nur normale Formen behalten
+                df_mini_keep = df_mini[(mask_keep) & (mask_real_feature)].copy()
+                df_mini_merge = df_mini[(~mask_keep) | (~mask_real_feature)].copy()
+
+                arcpy.AddMessage(
+                    f"    {len(df_mini_keep)} Mini-Flächen erhalten (>= 1 m²), "
+                    f"{len(df_mini_merge)} Mini-Flächen werden gemergt (< 1 m²)"
+                )
+
+                # Erhaltungswürdige Mini-Flächen zu Main hinzufügen
+                df_main = pd.concat([df_main, df_mini_keep], ignore_index=True)
+
+                # Merge zu verlustende Mini-Flächen mit angrenzenden Hauptflächen
+                if len(df_mini_merge) > 0 and SHAPELY_AVAILABLE:
+                    df_main = self._merge_mini_into_main_nutzung(df_main, df_mini_merge)
+
+                df_mini = df_mini_merge
+
+            else:
+                df_mini = pd.DataFrame()
 
             # Overlap-Handling: weitere_nutzung_id == 1000
             overlap_mask = df_main["weitere_nutzung_id"] == 1000
@@ -564,9 +588,9 @@ class SFLCalculatorOptimized:
             processed_groups += 1
             is_debug = str(fsk).startswith(self.debug_fsk)
 
-            if is_debug:
-                arcpy.AddMessage(f"[DEBUG {fsk}] Starte Delta-Korrektur")
-                arcpy.AddMessage(f"[DEBUG {fsk}] Features in dieser FSK: {len(fsk_data)}")
+            # if is_debug:
+            #     arcpy.AddMessage(f"[DEBUG {fsk}] Starte Delta-Korrektur")
+            #     arcpy.AddMessage(f"[DEBUG {fsk}] Features in dieser FSK: {len(fsk_data)}")
 
             # Progress alle 5000 Gruppen
             if processed_groups % 50000 == 0 or processed_groups == total_groups:
@@ -578,13 +602,13 @@ class SFLCalculatorOptimized:
             afl = fsk_data["amtliche_flaeche"].iloc[0]
             sfl_sum = fsk_data["sfl"].sum()
 
-            if is_debug:
-                arcpy.AddMessage(f"[DEBUG {fsk}] AFL: {afl}, SFL_sum: {sfl_sum}")
+            # if is_debug:
+            #     arcpy.AddMessage(f"[DEBUG {fsk}] AFL: {afl}, SFL_sum: {sfl_sum}")
 
             if sfl_sum == afl:
                 processed_count += len(fsk_data)
-                if is_debug:
-                    arcpy.AddMessage(f"[DEBUG {fsk}] SFL_sum == AFL, keine Korrektur nötig")
+                # if is_debug:
+                #     arcpy.AddMessage(f"[DEBUG {fsk}] SFL_sum == AFL, keine Korrektur nötig")
                 continue
 
             delta = afl - sfl_sum
@@ -621,28 +645,58 @@ class SFLCalculatorOptimized:
 
                     remaining_delta = abs_delta
 
-                    # Berechne Anteile proportional
-                    for i, idx in enumerate(eligible_indices):
+                    # Berechne Anteile proportional (NEUE LOGIK: proportionale Verteilung für ALLE)
+                    for idx in eligible_indices:
                         sfl = df.at[idx, "sfl"]
                         ratio = float(sfl) / float(total_sfl_eligible) if total_sfl_eligible > 0 else 0
                         oid = df.at[idx, "objectid"]
 
-                        if i == 0:
-                            # ERSTER (größter): nimm exakt den Rest
-                            int_anteil = remaining_delta
-                            if is_debug:
-                                arcpy.AddMessage(
-                                    f"[DEBUG {fsk}]   OID {oid}: ERSTER Feature (größter), int_anteil={int_anteil} (Rest)"
-                                )
-                        else:
-                            int_anteil = int(abs_delta * ratio)
-                            if is_debug:
-                                arcpy.AddMessage(
-                                    f"[DEBUG {fsk}]   OID {oid}: SFL={sfl}, Ratio={ratio:.4f}, int_anteil={int_anteil}"
-                                )
+                        # Alle Features bekommen ihren proportionalen Anteil
+                        int_anteil = int(abs_delta * ratio)
+                        if is_debug:
+                            arcpy.AddMessage(
+                                f"[DEBUG {fsk}]   OID {oid}: SFL={sfl}, Ratio={ratio:.4f}, int_anteil={int_anteil}"
+                            )
 
                         remaining_delta -= int_anteil
                         adjustments[idx] = int_anteil
+
+                    # Der ERSTE (größte) nimmt den Rundungsrest
+                    if len(adjustments) > 0:
+                        first_idx = eligible_indices[0]
+                        old_adjustment = adjustments[first_idx]
+                        adjustments[first_idx] = old_adjustment + remaining_delta
+
+                        if is_debug and remaining_delta != 0:
+                            oid = df.at[first_idx, "objectid"]
+                            arcpy.AddMessage(
+                                f"[DEBUG {fsk}]   Rundungsausgleich für größtes Feature OID {oid}: +{remaining_delta} qm"
+                            )
+
+                        remaining_delta = 0
+
+                    # # ALT: ERSTER (größter) nimmt exakt den Rest
+                    # for i, idx in enumerate(eligible_indices):
+                    #     sfl = df.at[idx, "sfl"]
+                    #     ratio = float(sfl) / float(total_sfl_eligible) if total_sfl_eligible > 0 else 0
+                    #     oid = df.at[idx, "objectid"]
+                    #
+                    #     if i == 0:
+                    #         # ERSTER (größter): nimm exakt den Rest
+                    #         int_anteil = remaining_delta
+                    #         if is_debug:
+                    #             arcpy.AddMessage(
+                    #                 f"[DEBUG {fsk}]   OID {oid}: ERSTER Feature (größter), int_anteil={int_anteil} (Rest)"
+                    #             )
+                    #     else:
+                    #         int_anteil = int(abs_delta * ratio)
+                    #         if is_debug:
+                    #             arcpy.AddMessage(
+                    #                 f"[DEBUG {fsk}]   OID {oid}: SFL={sfl}, Ratio={ratio:.4f}, int_anteil={int_anteil}"
+                    #             )
+                    #
+                    #     remaining_delta -= int_anteil
+                    #     adjustments[idx] = int_anteil
 
                     # Wende Anpassungen an
                     for idx, adjustment in adjustments.items():
