@@ -62,6 +62,9 @@ class SFLCalculatorOptimized:
         Lädt alle Flurstücke in einen Pandas DataFrame mit Geometrien.
         Berechnet auch den Verbesserungsfaktor.
         """
+        if self.df_flurstuecke is not None:
+            arcpy.AddMessage("  Flurstücke bereits geladen, überspringe Load")
+            return True
         arcpy.AddMessage("Lade Flurstücke in DataFrame...")
         try:
             flurstueck = os.path.join(self.gdb_path, "nora_v_al_flurstueck")
@@ -97,6 +100,9 @@ class SFLCalculatorOptimized:
         """
         Lädt alle Nutzung Features in DataFrame nach Prepare-Phase.
         """
+        if self.df_nutzung is not None:
+            arcpy.AddMessage("  Nutzung bereits geladen, überspringe Load")
+            return True
         arcpy.AddMessage("Lade Nutzung Dissolve in DataFrame...")
         try:
             # Nutzt bereits vorbereitete nutzung_dissolve aus Prepare-Phase
@@ -288,7 +294,9 @@ class SFLCalculatorOptimized:
                 return False
 
             # Verschneiden
-            arcpy.PairwiseIntersect_analysis([nutzung, flurstueck], "nutzung_intersect", "NO_FID", None, "INPUT")
+            arcpy.PairwiseIntersect_analysis(
+                [nutzung, flurstueck], "nutzung_intersect", "NO_FID", "0.001 Meters", "INPUT"
+            )
             arcpy.AddMessage("Nutzung-Intersect durchgeführt")
 
             # Dissolve mit Klassifizierungsfeldern
@@ -300,10 +308,10 @@ class SFLCalculatorOptimized:
             arcpy.AddMessage("Nutzung-Dissolve durchgeführt")
 
             # SFL-Feld hinzufügen
-            if not any(f.name == "sfl" for f in arcpy.ListFields("nutzung_dissolve")):
-                arcpy.AddField_management(
-                    "nutzung_dissolve", "sfl", "LONG", None, None, None, "Schnittfläche", "NULLABLE", "NON_REQUIRED"
-                )
+
+            arcpy.AddField_management(
+                "nutzung_dissolve", "sfl", "LONG", None, None, None, "Schnittfläche", "NULLABLE", "NON_REQUIRED"
+            )
 
             # Navigation_nutzung Tabelle initialisieren/leeren
             nav_nutzung = os.path.join(self.gdb_path, "navigation_nutzung")
@@ -332,41 +340,40 @@ class SFLCalculatorOptimized:
 
             # FSK Bodenschätzung - Intersect
             arcpy.PairwiseIntersect_analysis(
-                [bodenschaetzung, flurstueck], "bodenschaetzung_intersect", "NO_FID", None, "INPUT"
+                [bodenschaetzung, flurstueck], "bodenschaetzung_intersect", "NO_FID", "0.02 Meters", "INPUT"
             )
             arcpy.AddMessage("Bodenschätzung-Intersect durchgeführt")
 
             # Dissolve
             arcpy.PairwiseDissolve_analysis(
                 "bodenschaetzung_intersect",
-                "fsk_bodenschaetzung",
+                "bodenschaetzung_dissolve",
                 "bodenart_id;bodenart_name;nutzungsart_id;nutzungsart_name;entstehung_id;entstehung_name;klima_id;klima_name;wasser_id;wasser_name;bodenstufe_id;bodenstufe_name;zustand_id;zustand_name;sonstige_angaben_id;sonstige_angaben_name;bodenzahl;ackerzahl;flurstueckskennzeichen;amtliche_flaeche",
             )
             arcpy.AddMessage("Bodenschätzung-Dissolve durchgeführt")
 
             # Felder hinzufügen
             for field_name, field_type in [("sfl", "LONG"), ("emz", "LONG")]:
-                if not any(f.name == field_name for f in arcpy.ListFields("fsk_bodenschaetzung")):
-                    arcpy.AddField_management(
-                        "fsk_bodenschaetzung",
-                        field_name,
-                        field_type,
-                        None,
-                        None,
-                        None,
-                        field_name.upper(),
-                        "NULLABLE",
-                        "NON_REQUIRED",
-                    )
+                arcpy.AddField_management(
+                    "bodenschaetzung_dissolve",
+                    field_name,
+                    field_type,
+                    None,
+                    None,
+                    None,
+                    field_name.upper(),
+                    "NULLABLE",
+                    "NON_REQUIRED",
+                )
             arcpy.AddMessage("SFL- und EMZ-Felder hinzugefügt")
 
             # Filterung: Nur relevante Nutzungsarten behalten -> Landwirtschaft, Heide, Sumpf, UnlandVegetationsloseFlaeche und GFLF/ Landwirtschaftliche Betriebsfläche/Forstwirtschaftliche Betriebsfläche und Garten
             arcpy.MakeFeatureLayer_management(
                 nutzung_dissolve,
                 "nutzung_lyr",
-                where_clause="objektart NOT IN (43001, 43004, 43006, 43007) Or (objektart = 41006 And unterart_id IN (2700,7600,6800)) Or (objektart = 41008 And unterart_id IN (4460))",
+                where_clause="NOT ((objektart IN (43001, 43004, 43006, 43007)) OR (objektart = 41006 AND unterart_id IN (2700, 7600, 6800)) OR (objektart = 41008 AND unterart_id IN (4460)))",
             )
-            arcpy.Erase_analysis("fsk_bodenschaetzung", "nutzung_lyr", "schaetzung_relevante_nutz", "0.02 Meters")
+            arcpy.Erase_analysis("bodenschaetzung_dissolve", "nutzung_lyr", "schaetzung_relevante_nutz", "0.02 Meters")
             arcpy.AddMessage("Relevante Nutzungen aus Bodenschätzung gefiltert")
 
             # Bewertungen ausschließen siehe VWVLK Anlage 1, Objektart Bewertung
@@ -387,20 +394,24 @@ class SFLCalculatorOptimized:
                     "nora_v_al_bodenbewertung nicht vorhanden, Bewertungsflächen können nicht ausgeschlossen werden"
                 )
 
-            # Kleinstflächen löschen
-            arcpy.MakeFeatureLayer_management(
-                "schaetzung_o_bewertung", "schaetzung_o_bewertung_lyr", "shape_Area < 0.5"
-            )
-            arcpy.DeleteFeatures_management("schaetzung_o_bewertung_lyr")
-            arcpy.AddMessage("Kleinstflächen gelöscht")
+            # # Kleinstflächen löschen
+            # arcpy.MakeFeatureLayer_management(
+            #     "schaetzung_o_bewertung", "schaetzung_o_bewertung_lyr", "shape_Area < 0.5"
+            # )
+            # arcpy.DeleteFeatures_management("schaetzung_o_bewertung_lyr")
+            # arcpy.AddMessage("Kleinstflächen gelöscht")
 
-            # In fsk_bodenschaetzung übernehmen
-            arcpy.TruncateTable_management("fsk_bodenschaetzung")
-            arcpy.Append_management("schaetzung_o_bewertung", "fsk_bodenschaetzung", "NO_TEST")
+            arcpy.FeatureClassToFeatureClass_conversion("schaetzung_o_bewertung", self.workspace, "fsk_bodenschaetzung")
+
+            # # In fsk_bodenschaetzung übernehmen
+            # arcpy.TruncateTable_management("fsk_bodenschaetzung")
+            # arcpy.Append_management("schaetzung_o_bewertung", "fsk_bodenschaetzung", "NO_TEST")
 
             # Bewertungsflächenverschnitt
             if arcpy.Exists(bewertung):
-                arcpy.PairwiseIntersect_analysis([flurstueck, bewertung], "fsk_bewertung", "ALL", None, "INPUT")
+                arcpy.PairwiseIntersect_analysis(
+                    [flurstueck, bewertung], "fsk_bewertung", "ALL", "0.02 Meters", "INPUT"
+                )
                 arcpy.MakeFeatureLayer_management(
                     "fsk_bewertung",
                     "fsk_bewertung_lyr",
@@ -464,10 +475,12 @@ class SFLCalculatorOptimized:
             df = df.sort_values(["fsk", "geom_area"])
 
             # Vectorisierte Basis-SFL Berechnung
-            df["sfl"] = (df["geom_area"] * df["verbesserung"] + 0.5).astype(int)
+            df["raw_sfl"] = df["geom_area"] * df["verbesserung"]
+            df["sfl"] = (df["raw_sfl"] + 0.5).astype(int)  # round-half-up
 
             # Kleinstflächen-Filterung pro FSK
-            mask_mini = (df["geom_area"] < 2) & (df["amtliche_flaeche"] > 5)
+            mask_mini = (df["sfl"] <= 5) & (df["amtliche_flaeche"] > 5)
+
             df.loc[mask_mini, "is_mini"] = True
             df.loc[~mask_mini, "is_mini"] = False
 
@@ -477,7 +490,7 @@ class SFLCalculatorOptimized:
 
             arcpy.AddMessage(f"  Identifiziert {len(df_mini)} Kleinstflächen zur Verarbeitung")
 
-            # Mini-Flächen-Filterung: Nur die merge'en, die WENIGER als 1 m² bei Verteilung ergeben
+            # Mini-Flächen-Filterung: Nur die mergen, die WENIGER als 1 m² bei Verteilung ergeben
             # Prüfe ohne +0.5: geom_area * verbesserung < 1
             if len(df_mini) > 0:
                 # df[]=np.round(df["geom_area"] * df["verbesserung"]).astype(int)
@@ -487,7 +500,7 @@ class SFLCalculatorOptimized:
                 df_mini["form_index"] = df_mini["perimeter"] / np.sqrt(df_mini["geom_area"])
 
                 # Schmale, lange Schnipsel filtern (form_index > 8 = sehr dünn)
-                mask_real_feature = df_mini["form_index"] < 8  # Nur normale Formen behalten
+                mask_real_feature = df_mini["form_index"] < 40  # Nur normale Formen behalten
                 df_mini_keep = df_mini[(mask_keep) & (mask_real_feature)].copy()
                 df_mini_merge = df_mini[(~mask_keep) | (~mask_real_feature)].copy()
 
@@ -500,17 +513,20 @@ class SFLCalculatorOptimized:
                 df_main = pd.concat([df_main, df_mini_keep], ignore_index=True)
 
                 # Merge zu verlustende Mini-Flächen mit angrenzenden Hauptflächen
+                # Nach dem Merge: ungemergte werden zu Main hinzugefügt, gemergte werden aus df_mini entfernt
                 if len(df_mini_merge) > 0 and SHAPELY_AVAILABLE:
-                    df_main = self._merge_mini_into_main_nutzung(df_main, df_mini_merge)
-
-                df_mini = df_mini_merge
-
-            else:
-                df_mini = pd.DataFrame()
+                    df_main_after_merge, df_mini_to_delete = self._merge_mini_into_main_nutzung(df_main, df_mini_merge)
+                    df_main = df_main_after_merge
+                    df_mini = df_mini_to_delete  # Nur die tatsächlich gemergt wurden
+                else:
+                    df_mini = pd.DataFrame()  # Nichts zu mergen
+            # df_main = df.copy()
+            # df_mini = pd.DataFrame()
 
             # Overlap-Handling: weitere_nutzung_id == 1000
             overlap_mask = df_main["weitere_nutzung_id"] == 1000
             df_main.loc[overlap_mask, "sfl"] = (df_main.loc[overlap_mask, "geom_area"]).astype(int)
+            df_main["is_overlap"] = df_main["weitere_nutzung_id"] == 1000
 
             # Delta-Korrektur pro FSK
             df_main = self._apply_delta_correction_nutzung(df_main)
@@ -527,54 +543,126 @@ class SFLCalculatorOptimized:
 
     def _merge_mini_into_main_nutzung(self, df_main, df_mini):
         """
-        Merge Mini-Flächen mit angrenzenden Hauptflächen.
-        Nutzt Geometrie-Union und touches() Logic.
+        Merge Mini-Flächen mit angrenzenden Hauptflächen - ROBUST.
+
+        Top-Level Loop durch Mini-Flächen (nur ~500):
+        - Für jede Mini: Suche nur Main-Features der GLEICHEN FSK
+        - Fallback-Strategien: touches → intersects → buffer-distance
+        - Kein STRtree (vermeidet Array-Fehler)
         """
         arcpy.AddMessage("  Merge Kleinstflächen mit Hauptflächen...")
 
-        for fsk in df_main["fsk"].unique():
-            fsk_mini = df_mini[df_mini["fsk"] == fsk]
-            fsk_main_idx = df_main[df_main["fsk"] == fsk].index
+        start_time = time.time()
+        merged_oids = set()
+        tolerance = 0.1  # 10cm Buffer für Toleranz
+        total_mini = len(df_mini)
+        processed_mini = 0
 
-            if len(fsk_mini) == 0:
+        # Loop durch Mini-Flächen (äußerer Loop = klein!)
+        for _, mini_row in df_mini.iterrows():
+            processed_mini += 1
+            mini_oid = mini_row["objectid"]
+            mini_geom = mini_row["geometry"]
+            mini_fsk = mini_row["fsk"]
+
+            # Progress alle 100 Features oder am Ende
+            if processed_mini % 1000 == 0 or processed_mini == total_mini:
+                elapsed = time.time() - start_time
+                arcpy.AddMessage(
+                    f"    Fortschritt: {processed_mini}/{total_mini} Mini-Flächen verarbeitet "
+                    f"({len(merged_oids)} erfolgreich gemergt, {elapsed:.1f}s)"
+                )
+
+            # Hole nur Main-Features dieser FSK
+            fsk_main_mask = df_main["fsk"] == mini_fsk
+            if not fsk_main_mask.any():
                 continue
 
-            # Für jede Mini-Fläche: find angrenzende Hauptfläche
-            for _, mini_row in fsk_mini.iterrows():
-                mini_geom = mini_row["geometry"]
-                touched = False
+            fsk_main_idx = df_main[fsk_main_mask].index
+            best_match_idx = None
 
+            # === Strategie 1: Direct touches/intersects ===
+            for main_idx in fsk_main_idx:
+                main_geom = df_main.at[main_idx, "geometry"]
+                try:
+                    if main_geom.touches(mini_geom) or main_geom.intersects(mini_geom):
+                        best_match_idx = main_idx
+                        break
+                except:
+                    pass
+
+            # === Strategie 2: Distance check mit Toleranz ===
+            if best_match_idx is None:
+                min_distance = float("inf")
                 for main_idx in fsk_main_idx:
-                    main_row = df_main.loc[main_idx]
-                    main_geom = main_row["geometry"]
-
+                    main_geom = df_main.at[main_idx, "geometry"]
                     try:
-                        if main_geom.touches(mini_geom):
-                            # Union und neu berechnen
-                            union_geom = main_geom.union(mini_geom)
-                            union_area = union_geom.area
+                        distance = main_geom.distance(mini_geom)
+                        if distance < tolerance and distance < min_distance:
+                            min_distance = distance
+                            best_match_idx = main_idx
+                    except:
+                        pass
 
-                            verbesserung = main_row["verbesserung"]
-                            new_sfl = int(union_area * verbesserung + 0.5)
+            # === Strategie 3: Buffer - größte angrenzende Fläche ===
+            if best_match_idx is None:
+                try:
+                    mini_buffer = mini_geom.buffer(0.5)
+                    max_area = 0
+                    for main_idx in fsk_main_idx:
+                        main_geom = df_main.at[main_idx, "geometry"]
+                        try:
+                            if mini_buffer.intersects(main_geom):
+                                if main_geom.area > max_area:
+                                    max_area = main_geom.area
+                                    best_match_idx = main_idx
+                        except:
+                            pass
+                except:
+                    pass
 
-                            df_main.at[main_idx, "geometry"] = union_geom
-                            df_main.at[main_idx, "geom_area"] = union_area
-                            df_main.at[main_idx, "sfl"] = new_sfl
+            # === Merge durchführen ===
+            if best_match_idx is not None:
+                try:
+                    main_geom = df_main.at[best_match_idx, "geometry"]
+                    union_geom = main_geom.union(mini_geom)
+                    union_area = union_geom.area
 
-                            touched = True
-                            break
-                    except Exception as e:
-                        arcpy.AddWarning(f"    Geometrie-Union fehlgeschlagen: {str(e)}")
+                    df_main.at[best_match_idx, "geometry"] = union_geom
+                    df_main.at[best_match_idx, "geom_area"] = union_area
 
-                if not touched:
-                    arcpy.AddMessage(
-                        f"    Mini-Fläche {mini_row['objectid']} in {fsk} hat keine angrenzende Hauptfläche"
-                    )
+                    # SFL mit neuer Fläche berechnen
+                    verbesserung = df_main.at[best_match_idx, "verbesserung"]
+                    new_sfl = int(union_area * verbesserung + 0.5)
+                    df_main.at[best_match_idx, "sfl"] = new_sfl
 
-        return df_main
+                    merged_oids.add(mini_oid)
+                except Exception as e:
+                    arcpy.AddWarning(f"    Merge für Mini {mini_oid} fehlgeschlagen: {e}")
+
+        df_mini_deleted = df_mini[df_mini["objectid"].isin(merged_oids)].copy()
+        df_mini_not_merged = df_mini[~df_mini["objectid"].isin(merged_oids)].copy()
+        elapsed = time.time() - start_time
+
+        # Warnung für nicht-gemergte Flächen
+        if len(df_mini_not_merged) > 0:
+            arcpy.AddWarning(
+                f"    WARNUNG: {len(df_mini_not_merged)} Mini-Flächen konnten nicht gemergt werden und werden gelöscht"
+            )
+            for _, row in df_mini_not_merged.iterrows():
+                fsk = row["fsk"]
+                oid = row["objectid"]
+                sfl = row["sfl"]
+                arcpy.AddWarning(f"      FSK {fsk}, OID {oid}, SFL {sfl} m² - GELÖSCHT")
+
+        arcpy.AddMessage(f"    {len(merged_oids)}/{len(df_mini)} Mini-Flächen gemergt ({elapsed:.2f}s)")
+
+        # Alle Mini-Flächen zurückgeben (gemergt + nicht-gemergt) zum Löschen
+        all_mini_to_delete = pd.concat([df_mini_deleted, df_mini_not_merged], ignore_index=True)
+        return df_main, all_mini_to_delete
 
     def _apply_delta_correction_nutzung(self, df):
-        """Vectorisierte Delta-Korrektur mit korrekt gestaffelter Verteilung."""
+        """Delta-Korrektur je FSK: kleine Deltas (<5 qm) proportional auf große Features verteilen."""
         arcpy.AddMessage("  Wende Delta-Korrektur an...")
 
         start_time = time.time()
@@ -588,130 +676,100 @@ class SFLCalculatorOptimized:
             processed_groups += 1
             is_debug = str(fsk).startswith(self.debug_fsk)
 
-            # if is_debug:
-            #     arcpy.AddMessage(f"[DEBUG {fsk}] Starte Delta-Korrektur")
-            #     arcpy.AddMessage(f"[DEBUG {fsk}] Features in dieser FSK: {len(fsk_data)}")
-
-            # Progress alle 5000 Gruppen
+            # Progress alle 50k Gruppen (oder am Ende)
             if processed_groups % 50000 == 0 or processed_groups == total_groups:
                 elapsed = time.time() - start_time
                 arcpy.AddMessage(
-                    f"    Fortschritt: {processed_groups}/{total_groups} FSK ({processed_count} Features bearbeitet, {elapsed:.1f}s)"
+                    f"    Fortschritt: {processed_groups}/{total_groups} FSK "
+                    f"({processed_count} Features bearbeitet, {elapsed:.1f}s)"
                 )
 
             afl = fsk_data["amtliche_flaeche"].iloc[0]
-            sfl_sum = fsk_data["sfl"].sum()
 
-            # if is_debug:
-            #     arcpy.AddMessage(f"[DEBUG {fsk}] AFL: {afl}, SFL_sum: {sfl_sum}")
+            non_overlap_mask = fsk_data["is_overlap"] == False  # NEU
+            fsk_data_main = fsk_data[non_overlap_mask]  # NEU
+            sfl_sum = fsk_data_main["sfl"].sum()
 
             if sfl_sum == afl:
                 processed_count += len(fsk_data)
-                # if is_debug:
-                #     arcpy.AddMessage(f"[DEBUG {fsk}] SFL_sum == AFL, keine Korrektur nötig")
                 continue
 
             delta = afl - sfl_sum
             abs_delta = abs(delta)
 
-            if is_debug:
-                arcpy.AddMessage(f"[DEBUG {fsk}] Delta: {delta}, Abs_delta: {abs_delta}")
+            # if is_debug:
+            #     arcpy.AddMessage(f"[DEBUG {fsk}] AFL={afl}, SFL_sum={sfl_sum}, Delta={delta}, Abs_delta={abs_delta}")
 
-            if abs_delta < 5:  # Nur kleine Deltas korrigieren
-                fsk_indices = fsk_data.index
-                sorted_idx = fsk_data["sfl"].values.argsort()[::-1]
-                sorted_indices = fsk_indices[sorted_idx]
+            # Nur kleine Deltas korrigieren
+            if abs_delta >= 5:
+                if is_debug:
+                    arcpy.AddMessage(f"[DEBUG {fsk}] abs_delta={abs_delta} >= 5, keine Korrektur (zu großer Delta)")
+                processed_count += len(fsk_data)
+                continue
+
+            # Sortiere Features nach SFL absteigend
+            fsk_indices = fsk_data.index
+            sorted_idx = fsk_data["sfl"].values.argsort()[::-1]
+            sorted_indices = fsk_indices[sorted_idx]
+
+            # Nur Features >= max_shred_qm berücksichtigen
+            eligible_indices = [
+                idx
+                for idx in sorted_indices
+                if idx in fsk_data_main.index and fsk_data.at[idx, "sfl"] >= self.max_shred_qm
+            ]
+
+            # if is_debug:
+            #     arcpy.AddMessage(f"[DEBUG {fsk}] Eligible (SFL >= {self.max_shred_qm}): {len(eligible_indices)}")
+
+            if not eligible_indices:
+                # Nichts zu korrigieren, weil keine geeigneten Features vorhanden
+                processed_count += len(fsk_data)
+                continue
+
+            total_sfl_eligible = float(sum(df.at[idx, "sfl"] for idx in eligible_indices))
+            if total_sfl_eligible <= 0:
+                processed_count += len(fsk_data)
+                continue
+
+            # Verteile abs_delta: alle außer dem größten bekommen Anteile, der größte bekommt den Rest
+            first_idx = eligible_indices[0]  # größtes Feature
+            shares = {}
+
+            sum_other = 0
+            for idx in eligible_indices[1:]:
+                sfl = float(df.at[idx, "sfl"])
+                ratio = sfl / total_sfl_eligible
+                share = int(abs_delta * ratio)
+                shares[idx] = share
+                sum_other += share
+
+                # if is_debug:
+                #     oid = df.at[idx, "objectid"]
+                #     arcpy.AddMessage(f"[DEBUG {fsk}]   OID {oid}: SFL={sfl}, Ratio={ratio:.4f}, Anteil={share}")
+
+            # Rest geht an größtes Feature, damit Summe exakt abs_delta wird
+            remainder = abs_delta - sum_other
+            shares[first_idx] = remainder
+
+            # if is_debug:
+            #     oid = df.at[first_idx, "objectid"]
+            #     arcpy.AddMessage(
+            #         f"[DEBUG {fsk}]   OID {oid}: größtes Feature bekommt Rest={remainder} (Summe={abs_delta})"
+            #     )
+
+            # Anwenden (Vorzeichen beachten)
+            sign = 1 if delta >= 0 else -1
+            for idx, share in shares.items():
+                if share == 0:
+                    continue
+                old_sfl = df.at[idx, "sfl"]
+                new_sfl = old_sfl + (sign * share)
+                df.at[idx, "sfl"] = new_sfl
 
                 if is_debug:
-                    arcpy.AddMessage(
-                        f"[DEBUG {fsk}] Sortierte Indices nach SFL (absteigend): {sorted_indices.tolist()}"
-                    )
-
-                adjustments = {}  # idx -> adjustment_value
-
-                # Nur Features > max_shred_qm berücksichtigen
-                eligible_indices = [idx for idx in sorted_indices if df.at[idx, "sfl"] >= self.max_shred_qm]
-
-                if is_debug:
-                    arcpy.AddMessage(f"[DEBUG {fsk}] Eligible indices (SFL >= {self.max_shred_qm}): {eligible_indices}")
-                    for idx in eligible_indices:
-                        arcpy.AddMessage(f"[DEBUG {fsk}]   OID {df.at[idx, 'objectid']}: SFL={df.at[idx, 'sfl']}")
-
-                if len(eligible_indices) > 0:
-                    total_sfl_eligible = sum(df.at[idx, "sfl"] for idx in eligible_indices)
-
-                    if is_debug:
-                        arcpy.AddMessage(f"[DEBUG {fsk}] Total SFL eligible: {total_sfl_eligible}")
-
-                    remaining_delta = abs_delta
-
-                    # Berechne Anteile proportional (NEUE LOGIK: proportionale Verteilung für ALLE)
-                    for idx in eligible_indices:
-                        sfl = df.at[idx, "sfl"]
-                        ratio = float(sfl) / float(total_sfl_eligible) if total_sfl_eligible > 0 else 0
-                        oid = df.at[idx, "objectid"]
-
-                        # Alle Features bekommen ihren proportionalen Anteil
-                        int_anteil = int(abs_delta * ratio)
-                        if is_debug:
-                            arcpy.AddMessage(
-                                f"[DEBUG {fsk}]   OID {oid}: SFL={sfl}, Ratio={ratio:.4f}, int_anteil={int_anteil}"
-                            )
-
-                        remaining_delta -= int_anteil
-                        adjustments[idx] = int_anteil
-
-                    # Der ERSTE (größte) nimmt den Rundungsrest
-                    if len(adjustments) > 0:
-                        first_idx = eligible_indices[0]
-                        old_adjustment = adjustments[first_idx]
-                        adjustments[first_idx] = old_adjustment + remaining_delta
-
-                        if is_debug and remaining_delta != 0:
-                            oid = df.at[first_idx, "objectid"]
-                            arcpy.AddMessage(
-                                f"[DEBUG {fsk}]   Rundungsausgleich für größtes Feature OID {oid}: +{remaining_delta} qm"
-                            )
-
-                        remaining_delta = 0
-
-                    # # ALT: ERSTER (größter) nimmt exakt den Rest
-                    # for i, idx in enumerate(eligible_indices):
-                    #     sfl = df.at[idx, "sfl"]
-                    #     ratio = float(sfl) / float(total_sfl_eligible) if total_sfl_eligible > 0 else 0
-                    #     oid = df.at[idx, "objectid"]
-                    #
-                    #     if i == 0:
-                    #         # ERSTER (größter): nimm exakt den Rest
-                    #         int_anteil = remaining_delta
-                    #         if is_debug:
-                    #             arcpy.AddMessage(
-                    #                 f"[DEBUG {fsk}]   OID {oid}: ERSTER Feature (größter), int_anteil={int_anteil} (Rest)"
-                    #             )
-                    #     else:
-                    #         int_anteil = int(abs_delta * ratio)
-                    #         if is_debug:
-                    #             arcpy.AddMessage(
-                    #                 f"[DEBUG {fsk}]   OID {oid}: SFL={sfl}, Ratio={ratio:.4f}, int_anteil={int_anteil}"
-                    #             )
-                    #
-                    #     remaining_delta -= int_anteil
-                    #     adjustments[idx] = int_anteil
-
-                    # Wende Anpassungen an
-                    for idx, adjustment in adjustments.items():
-                        old_sfl = df.at[idx, "sfl"]
-                        new_sfl = old_sfl + (adjustment if delta >= 0 else -adjustment)
-                        df.at[idx, "sfl"] = new_sfl
-
-                        if is_debug:
-                            oid = df.at[idx, "objectid"]
-                            arcpy.AddMessage(f"[DEBUG {fsk}]   ANPASSUNG OID {oid}: {old_sfl} -> {new_sfl}")
-
-                    if remaining_delta != 0 and is_debug:
-                        arcpy.AddMessage(f"[DEBUG {fsk}] Restanteil {remaining_delta} qm (unverteilt)")
-            elif is_debug:
-                arcpy.AddMessage(f"[DEBUG {fsk}] abs_delta={abs_delta} >= 5, keine Korrektur (zu großer Delta)")
+                    oid = df.at[idx, "objectid"]
+                    arcpy.AddMessage(f"[DEBUG {fsk}]   ANPASSUNG OID {oid}: {old_sfl} -> {new_sfl} (±{share})")
 
             processed_count += len(fsk_data)
 
@@ -729,12 +787,14 @@ class SFLCalculatorOptimized:
         try:
             # Batch Update für Main Features
             oid_to_sfl = dict(zip(df_main["objectid"], df_main["sfl"]))
+            oid_to_geom = dict(zip(df_main["objectid"], df_main["geometry"]))
 
-            with arcpy.da.UpdateCursor("nutzung_dissolve", ["OBJECTID", "sfl"]) as ucursor:
+            with arcpy.da.UpdateCursor("nutzung_dissolve", ["OBJECTID", "sfl", "SHAPE@"]) as ucursor:
                 for row in ucursor:
                     oid = row[0]
                     if oid in oid_to_sfl:
                         row[1] = oid_to_sfl[oid]
+                        row[2] = oid_to_geom[oid]
                         ucursor.updateRow(row)
 
             # Lösche Mini-Flächen
@@ -760,6 +820,11 @@ class SFLCalculatorOptimized:
         arcpy.AddMessage("--------Starte vectorisierte SFL/EMZ-Berechnung (Bodenschätzung)--------")
 
         try:
+            # Laden in DataFrame
+            if not self.load_flurstuecke_to_dataframe():
+                return False
+            if not self.load_nutzung_to_dataframe():
+                return False
             if not self.load_bodenschaetzung_to_dataframe():
                 return False
 
@@ -790,11 +855,8 @@ class SFLCalculatorOptimized:
                 # Vorfiltert: nur relevante Nutzungen
                 relevant_mask = (
                     (self.df_nutzung["objektart"].isin([43001, 43004, 43006, 43007]))
-                    | (
-                        (self.df_nutzung["objektart"] == 41006)
-                        & (self.df_nutzung["unterart_id"].isin(["2700", "6800"]))
-                    )
-                    | ((self.df_nutzung["objektart"] == 41008) & (self.df_nutzung["unterart_id"].isin(["4460"])))
+                    | ((self.df_nutzung["objektart"] == 41006) & (self.df_nutzung["unterart_id"].isin([2700, 6800])))
+                    | ((self.df_nutzung["objektart"] == 41008) & (self.df_nutzung["unterart_id"].isin([4460])))
                 )
                 df_relevant_nutzung = self.df_nutzung[relevant_mask].copy()
 
@@ -803,12 +865,12 @@ class SFLCalculatorOptimized:
                     df_nutzung_merged = df_relevant_nutzung.merge(
                         self.df_flurstuecke[["fsk", "verbesserung"]], on="fsk", how="left"
                     )
-                    df_nutzung_merged["sfl"] = (
+                    df_nutzung_merged["schaetz_sfl"] = (
                         df_nutzung_merged["geom_area"] * df_nutzung_merged["verbesserung"] + 0.5
                     ).astype(int)
 
                     # Gruppiere und summiere
-                    schaetz_afl_dict = df_nutzung_merged.groupby("fsk")["sfl"].sum().to_dict()
+                    schaetz_afl_dict = df_nutzung_merged.groupby("fsk")["schaetz_sfl"].sum().to_dict()
                 else:
                     schaetz_afl_dict = {}
             else:
@@ -828,7 +890,7 @@ class SFLCalculatorOptimized:
             # ========== SCHRITT 5: KLEINSTFLÄCHEN-FILTERUNG ==========
             step_start = time.time()
             arcpy.AddMessage("  5. Filtere Kleinstflächen...")
-            mask_mini = (df["geom_area"] < self.max_shred_qm) & (df["amtliche_flaeche_fsk"] > self.max_shred_qm * 2)
+            mask_mini = (df["geom_area"] < 2) & (df["amtliche_flaeche"] > 5)
             df_mini = df[mask_mini].copy()
             df_main = df[~mask_mini].copy()
             arcpy.AddMessage(
@@ -844,7 +906,7 @@ class SFLCalculatorOptimized:
             # ========== SCHRITT 7: BEWERTUNGSFLÄCHEN-HANDLING ==========
             step_start = time.time()
             arcpy.AddMessage("  6. Bearbeite Bewertungsflächen...")
-            bewertung_mask = df_main["sonstige_angaben_id"] == "9999"
+            bewertung_mask = df_main["sonstige_angaben_id"] == 9999
             if bewertung_mask.any():
                 df_main.loc[bewertung_mask, "sfl"] = (
                     df_main.loc[bewertung_mask, "geom_area"] * df_main.loc[bewertung_mask, "verbesserung"] + 0.5
@@ -889,7 +951,7 @@ class SFLCalculatorOptimized:
             return 0
 
         # Summe der SFL
-        # Verwende mergemerged verbesserung
+        # Verwende merged verbesserung
         fsk_verbesserung = group["verbesserung"].iloc[0]
         schaetz_sum = (relevant_nutzung_fsk["geom_area"] * fsk_verbesserung + 0.5).sum()
 
@@ -897,42 +959,108 @@ class SFLCalculatorOptimized:
 
     def _merge_mini_into_main_boden(self, df_main, df_mini):
         """
-        Merge Mini-Flächen in Bodenschätzung mit angrenzenden Hauptflächen.
+        Merge Mini-Flächen in Bodenschätzung mit angrenzenden Hauptflächen - OPTIMIERT.
+
+        Top-Level Loop durch Mini-Flächen (äußerer Loop = klein!):
+        - Für jede Mini: Suche nur Main-Features der GLEICHEN FSK
+        - Fallback-Strategien: touches → intersects → buffer-distance
         """
         arcpy.AddMessage("  Merge Kleinstflächen (Bodenschätzung) mit Hauptflächen...")
 
-        for fsk in df_main["fsk"].unique():
-            fsk_mini = df_mini[df_mini["fsk"] == fsk]
-            fsk_main_idx = df_main[df_main["fsk"] == fsk].index
+        start_time = time.time()
+        merged_oids = set()
+        tolerance = 0.1  # 10cm Buffer für Toleranz
+        total_mini = len(df_mini)
+        processed_mini = 0
 
-            if len(fsk_mini) == 0:
+        # Loop durch Mini-Flächen (äußerer Loop = klein!)
+        for _, mini_row in df_mini.iterrows():
+            processed_mini += 1
+            mini_oid = mini_row["objectid"]
+            mini_geom = mini_row["geometry"]
+            mini_fsk = mini_row["fsk"]
+
+            # Progress alle 100 Features oder am Ende
+            if processed_mini % 1000 == 0 or processed_mini == total_mini:
+                elapsed = time.time() - start_time
+                arcpy.AddMessage(
+                    f"    Fortschritt: {processed_mini}/{total_mini} Mini-Flächen verarbeitet "
+                    f"({len(merged_oids)} erfolgreich gemergt, {elapsed:.1f}s)"
+                )
+
+            # Hole nur Main-Features dieser FSK
+            fsk_main_mask = df_main["fsk"] == mini_fsk
+            if not fsk_main_mask.any():
                 continue
 
-            for _, mini_row in fsk_mini.iterrows():
-                mini_geom = mini_row["geometry"]
+            fsk_main_idx = df_main[fsk_main_mask].index
+            best_match_idx = None
 
+            # === Strategie 1: Direct touches ===
+            for main_idx in fsk_main_idx:
+                main_geom = df_main.at[main_idx, "geometry"]
+                try:
+                    if main_geom.touches(mini_geom):
+                        best_match_idx = main_idx
+                        break
+                except:
+                    pass
+
+            # === Strategie 2: Distance check mit Toleranz ===
+            if best_match_idx is None:
+                min_distance = float("inf")
                 for main_idx in fsk_main_idx:
-                    main_row = df_main.loc[main_idx]
-                    main_geom = main_row["geometry"]
-
+                    main_geom = df_main.at[main_idx, "geometry"]
                     try:
-                        if main_geom.touches(mini_geom):
-                            union_geom = main_geom.union(mini_geom)
-                            union_area = union_geom.area
+                        distance = main_geom.distance(mini_geom)
+                        if distance < tolerance and distance < min_distance:
+                            min_distance = distance
+                            best_match_idx = main_idx
+                    except:
+                        pass
 
-                            verbesserung = main_row["verbesserung"]
-                            new_sfl = int(union_area * verbesserung + 0.5)
-                            ackerzahl = main_row["ackerzahl"]
-                            new_emz = int(round(new_sfl / 100 * ackerzahl))
+            # === Strategie 3: Buffer - größte angrenzende Fläche ===
+            if best_match_idx is None:
+                try:
+                    mini_buffer = mini_geom.buffer(0.5)
+                    max_area = 0
+                    for main_idx in fsk_main_idx:
+                        main_geom = df_main.at[main_idx, "geometry"]
+                        try:
+                            if mini_buffer.intersects(main_geom):
+                                if main_geom.area > max_area:
+                                    max_area = main_geom.area
+                                    best_match_idx = main_idx
+                        except:
+                            pass
+                except:
+                    pass
 
-                            df_main.at[main_idx, "geometry"] = union_geom
-                            df_main.at[main_idx, "geom_area"] = union_area
-                            df_main.at[main_idx, "sfl"] = new_sfl
-                            df_main.at[main_idx, "emz"] = new_emz
+            # === Merge durchführen ===
+            if best_match_idx is not None:
+                try:
+                    main_geom = df_main.at[best_match_idx, "geometry"]
+                    union_geom = main_geom.union(mini_geom)
+                    union_area = union_geom.area
 
-                            break
-                    except Exception as e:
-                        arcpy.AddWarning(f"    Geometrie-Union (Boden) fehlgeschlagen: {str(e)}")
+                    df_main.at[best_match_idx, "geometry"] = union_geom
+                    df_main.at[best_match_idx, "geom_area"] = union_area
+
+                    # SFL und EMZ mit neuer Fläche berechnen
+                    verbesserung = df_main.at[best_match_idx, "verbesserung"]
+                    new_sfl = int(union_area * verbesserung + 0.5)
+                    ackerzahl = df_main.at[best_match_idx, "ackerzahl"]
+                    new_emz = int(round(new_sfl / 100 * ackerzahl))
+
+                    df_main.at[best_match_idx, "sfl"] = new_sfl
+                    df_main.at[best_match_idx, "emz"] = new_emz
+
+                    merged_oids.add(mini_oid)
+                except Exception as e:
+                    arcpy.AddWarning(f"    Merge für Mini {mini_oid} fehlgeschlagen: {e}")
+
+        elapsed = time.time() - start_time
+        arcpy.AddMessage(f"    {len(merged_oids)}/{len(df_mini)} Mini-Flächen gemergt ({elapsed:.2f}s)")
 
         return df_main
 
@@ -1043,37 +1171,58 @@ class SFLCalculatorOptimized:
             raise
 
     def finalize_results(self):
-        """Übernimmt Ergebnisse in Navigation-Tabellen."""
+        """Übernimmt Ergebnisse in Navigation-Tabellen mit Fieldmapping und Tabellen-Erstellung."""
         try:
             nav_nutzung = os.path.join(self.gdb_path, "navigation_nutzung")
             nav_bodensch = os.path.join(self.gdb_path, "navigation_bodenschaetzung")
 
-            # Nutzung übernehmen
-            if arcpy.Exists(nav_nutzung):
-                field_mapping = (
-                    r'objektart "Objektart" true true false 8 Double 8 38,First,#,{0},objektart,-1,-1;'
-                    r'objektname "Nutzung" true true false 255 Text 0 0,First,#,{0},objektname,0,253;'
-                    r'unterart_typ "Unterart Typ" true true false 255 Text 0 0,First,#,{0},unterart_typ,0,253;'
-                    r'unterart_id "Unterart Schlüssel" true true false 8 Double 8 38,First,#,{0},unterart_id,-1,-1;'
-                    r'unterart_kuerzel "Abkürzung" true true false 10 Text 0 0,First,#,{0},unterart_kuerzel,0,49;'
-                    r'unterart_name "Unterart" true true false 255 Text 0 0,First,#,{0},unterart_name,0,253;'
-                    r'eigenname "Eigenname" true true false 50 Text 0 0,First,#,{0},eigenname,0,253;'
-                    r'weitere_nutzung_id "weitere Nutzung Schlüssel" true true false 8 Double 8 38,First,#,{0},weitere_nutzung_id,0,254;'
-                    r'weitere_nutzung_name "weitere Nutzung" true true false 255 Text 0 0,First,#,{0},weitere_nutzung_name,0,253;'
-                    r'klasse "Klasse" true true false 8 Double 8 38,First,#,{0},klasse,-1,-1;'
-                    r'flurstueckskennzeichen "Flurstückskennzeichen" true true false 255 Text 0 0,First,#,{0},flurstueckskennzeichen,0,253;'
-                    r'sfl "Fläche [m²]" true true false 4 Long 0 10,First,#,{0},sfl,-1,-1'
-                ).format("nutzung_dissolve")
+            # ========== NUTZUNG ==========
+            nutzung_field_mapping = (
+                r'objektart "Objektart" true true false 8 Double 8 38,First,#,{0},objektart,-1,-1;'
+                r'objektname "Nutzung" true true false 255 Text 0 0,First,#,{0},objektname,0,253;'
+                r'unterart_typ "Unterart Typ" true true false 255 Text 0 0,First,#,{0},unterart_typ,0,253;'
+                r'unterart_id "Unterart Schlüssel" true true false 8 Double 8 38,First,#,{0},unterart_id,-1,-1;'
+                r'unterart_kuerzel "Abkürzung" true true false 10 Text 0 0,First,#,{0},unterart_kuerzel,0,49;'
+                r'unterart_name "Unterart" true true false 255 Text 0 0,First,#,{0},unterart_name,0,253;'
+                r'eigenname "Eigenname" true true false 50 Text 0 0,First,#,{0},eigenname,0,253;'
+                r'weitere_nutzung_id "weitere Nutzung Schlüssel" true true false 8 Double 8 38,First,#,{0},weitere_nutzung_id,0,254;'
+                r'weitere_nutzung_name "weitere Nutzung" true true false 255 Text 0 0,First,#,{0},weitere_nutzung_name,0,253;'
+                r'klasse "Klasse" true true false 8 Double 8 38,First,#,{0},klasse,-1,-1;'
+                r'flurstueckskennzeichen "Flurstückskennzeichen" true true false 255 Text 0 0,First,#,{0},flurstueckskennzeichen,0,253;'
+                r'sfl "Fläche [m²]" true true false 4 Long 0 10,First,#,{0},sfl,-1,-1'
+            ).format("nutzung_dissolve")
 
+            if not arcpy.Exists(nav_nutzung):
+                # Tabelle existiert nicht -> kopiere mit Fieldmapping zum Erstellen
+                arcpy.CopyFeatures_management("nutzung_dissolve", nav_nutzung)
+                arcpy.AddMessage("Navigation_nutzung erstellt")
+            else:
+                # Tabelle existiert -> truncate und append mit Fieldmapping
                 arcpy.TruncateTable_management(nav_nutzung)
-                arcpy.Append_management("nutzung_dissolve", nav_nutzung, "NO_TEST", field_mapping)
-                arcpy.AddMessage("Navigation_nutzung übernommen")
+                arcpy.Append_management("nutzung_dissolve", nav_nutzung, "NO_TEST", nutzung_field_mapping)
+                arcpy.AddMessage("Navigation_nutzung aktualisiert")
 
-            # Bodenschätzung übernehmen
-            if arcpy.Exists(nav_bodensch):
+            # ========== BODENSCHÄTZUNG ==========
+            bodensch_field_mapping = (
+                r'objectid "OID" true true false 4 Long 0 10,First,#,{0},OBJECTID,-1,-1;'
+                r'flurstueckskennzeichen "Flurstückskennzeichen" true true false 255 Text 0 0,First,#,{0},flurstueckskennzeichen,0,253;'
+                r'bodenart_name "Bodenart" true true false 255 Text 0 0,First,#,{0},bodenart_name,0,253;'
+                r'nutzungsart_name "Nutzungsart" true true false 255 Text 0 0,First,#,{0},nutzungsart_name,0,253;'
+                r'bodenzahl "Bodenzahl" true true false 4 Long 0 10,First,#,{0},bodenzahl,-1,-1;'
+                r'ackerzahl "Ackerzahl" true true false 4 Long 0 10,First,#,{0},ackerzahl,-1,-1;'
+                r'sfl "SFL [m²]" true true false 4 Long 0 10,First,#,{0},sfl,-1,-1;'
+                r'emz "EMZ [m²]" true true false 4 Long 0 10,First,#,{0},emz,-1,-1'
+            ).format("fsk_bodenschaetzung")
+
+            if not arcpy.Exists(nav_bodensch):
+                # Tabelle existiert nicht -> kopiere zum Erstellen
+                arcpy.CopyFeatures_management("fsk_bodenschaetzung", nav_bodensch)
+                arcpy.AddMessage("Navigation_bodenschaetzung erstellt")
+            else:
+                # Tabelle existiert -> truncate und append mit Fieldmapping
                 arcpy.TruncateTable_management(nav_bodensch)
-                arcpy.Append_management("fsk_bodenschaetzung", nav_bodensch, "NO_TEST")
-                arcpy.AddMessage("Navigation_bodenschaetzung übernommen")
+                arcpy.Append_management("fsk_bodenschaetzung", nav_bodensch, "NO_TEST", bodensch_field_mapping)
+                arcpy.AddMessage("Navigation_bodenschaetzung aktualisiert")
 
             return True
 
@@ -1095,8 +1244,8 @@ def calculate_sfl_optimized(gdb_path, workspace):
     calculator = SFLCalculatorOptimized(gdb_path, workspace)
 
     # Schritt 1: Nutzung vorbereiten
-    if not calculator.prepare_nutzung():
-        return False
+    # if not calculator.prepare_nutzung():
+    #     return False
 
     # Schritt 2: Bodenschätzung vorbereiten
     if not calculator.prepare_boden():
@@ -1105,13 +1254,13 @@ def calculate_sfl_optimized(gdb_path, workspace):
     arcpy.AddMessage("========================================")
     arcpy.AddMessage("Nutze: GLOBALER Verbesserungsfaktor pro Flurstück")
     arcpy.AddMessage("========================================")
-    if not calculator.vectorized_calculate_sfl_nutzung():
-        return False
+    # if not calculator.vectorized_calculate_sfl_nutzung():
+    #     return False
     if not calculator.vectorized_calculate_sfl_boden():
         return False
 
-    # Schritt 4: Ergebnisse in Navigation-Tabellen
-    if not calculator.finalize_results():
-        return False
+    # # Schritt 4: Ergebnisse in Navigation-Tabellen
+    # if not calculator.finalize_results():
+    #     return False
 
     return True
