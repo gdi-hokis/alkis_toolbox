@@ -842,6 +842,9 @@ class wfs_download:
 
 
 class alkis_eigentuemer:
+    """
+    ArcGIS Toolbox Tool für das Verknüpfen von ALKIS-Eigentümerdaten aus einer CSV-Datei mit ALKIS-Flurstücken
+    """
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "alkis_eigentuemer"
@@ -1006,15 +1009,21 @@ class alkis_eigentuemer:
         output_table = parameters[4].valueAsText
 
         abrufdatum = datetime.now().strftime("%d.%m.%Y")
-        
+
         arcpy.env.workspace = gdb
-        
-        # Temporäre CSV vorbereiten
-        prepared_csv = os.path.join(os.path.dirname(alkis_csv), "prepared_" + os.path.basename(alkis_csv))
-        
-        # Schritt 1: Eigentümer Tabelle erstellen
-        copy_alkis_eigentuemer.MakeEigentuemerTable(fc_gemeinden, fc_flurstuecke, alkis_csv, prepared_csv, gdb, abrufdatum)
-        
+        arcpy.AddMessage(f"gdb: {gdb}")
+        arcpy.AddMessage(f"alkis_csv: {alkis_csv}")
+        arcpy.AddMessage(f"fc_gemeinden: {fc_gemeinden}")
+        arcpy.AddMessage(f"fc_flurstuecke: {fc_flurstuecke}")
+        arcpy.AddMessage(f"output_table: {output_table}")
+
+        # Schritt 1: csv bereinigen
+        prepared_csv = copy_alkis_eigentuemer.prepare_csv(alkis_csv)
+        arcpy.AddMessage(f"prepared_csv: {prepared_csv}")
+        arcpy.AddMessage("Testtesttest")
+
+        copy_alkis_eigentuemer.make_eigentuemer_table(fc_gemeinden, fc_flurstuecke, prepared_csv, gdb, abrufdatum)
+
         return
 
     def postExecute(self, parameters):
