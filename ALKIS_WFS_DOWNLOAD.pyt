@@ -855,25 +855,26 @@ class alkis_eigentuemer:
         """Define parameter definitions"""
         
         param0 = arcpy.Parameter(
-            displayName="Ziel-Geodatabase wählen",
-            name="existing_geodatabase",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        param1 = arcpy.Parameter(
             displayName="Pfad zur ALKIS-Eigentümer CSV-Datei",
             name="alkis_csv",
             datatype="DEFile",
             parameterType="Required",
             direction="Input",
         )
-        param1.filter.list = ["csv"]
+        param0.filter.list = ["csv"]
 
-        param2 = arcpy.Parameter(
+        param1 = arcpy.Parameter(
             displayName="Feature Class Gemeinden",
             name="feature_class_gemeinden",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param1.filter.list = ["Polygon"]
+
+        param2 = arcpy.Parameter(
+            displayName="Feature Class Flurstücke",
+            name="feature_class_flurstuecke",
             datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input",
@@ -881,24 +882,13 @@ class alkis_eigentuemer:
         param2.filter.list = ["Polygon"]
 
         param3 = arcpy.Parameter(
-            displayName="Feature Class Flurstücke",
-            name="feature_class_flurstuecke",
-            datatype="GPFeatureLayer",
-            parameterType="Required",
-            direction="Input",
-        )
-        param3.filter.list = ["Polygon"]
-
-        param4 = arcpy.Parameter(
             displayName="Endergebnis Tabelle Eigentümer",
             name="endresult_table_eigentuemer",
             datatype="DETable",
             parameterType="Required",
             direction="Output"
         )
-        
-
-        params = [param0, param1, param2, param3, param4]
+        params = [param0, param1, param2, param3]
         return params
 
     def isLicensed(self):
@@ -914,116 +904,123 @@ class alkis_eigentuemer:
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter. This method is called after internal validation."""
-        gdb = parameters[0]
-        alkis_csv = parameters[1]
-        fc_gemeinden = parameters[2]
-        fc_flurstuecke = parameters[3]
-        output_table = parameters[4]
+        alkis_csv = parameters[0]
+        fc_gemeinden = parameters[1]
+        fc_flurstuecke = parameters[2]
+        output_table = parameters[3]
 
-        # Prüfen ob Geodatabase ausgewählt wurde (bei Datentyp "DEWorkspace" theoretisch Auswahl eines Ordners möglich)
-        if gdb.value:
-            workspace_path = gdb.valueAsText
-            # Prüfen, ob der Pfad nicht auf ".gdb" endet
-            if not workspace_path.lower().endswith(".gdb"):
-                gdb.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
-
-        # Prüfen ob eine CSV-Datei ausgewählt wurde
-        # redundant durch Filter, bei händischer Eingabe des Pfades benötigt
+        # Parameter 1: csv-Datei
         if alkis_csv.value:
             csv_path = alkis_csv.valueAsText
-            # Prüfen, ob der Pfad nicht auf ".csv" endet
             if not csv_path.lower().endswith(".csv"):
                 alkis_csv.setErrorMessage("Bitte wählen Sie eine CSV-Datei (.csv) aus.")
-            # Prüfen ob CSV-Datei existiert
             elif not os.path.exists(csv_path):
                 alkis_csv.setErrorMessage(f"Die CSV-Datei existiert nicht: {csv_path}")
-            # Prüfen ob CSV-Datei lesbar ist
             elif not os.access(csv_path, os.R_OK):
                 alkis_csv.setErrorMessage(f"Die CSV-Datei kann nicht gelesen werden (fehlende Leserechte): {csv_path}")
-            # Prüfen ob CSV-Datei leer ist
             elif os.path.getsize(csv_path) == 0:
                 alkis_csv.setErrorMessage("Die CSV-Datei ist leer.")
 
-        # Prüfen ob Feature Class Gemeinden das Feld "flstkey" enthält
+        # Parameter 2: Feature Class Gemeinden
         if fc_gemeinden.value:
             try:
                 fields = [f.name.lower() for f in arcpy.ListFields(fc_gemeinden.value)]
                 if "gemeinde_name" not in fields:
                     fc_gemeinden.setWarningMessage("Die Feature Class enthält kein Feld 'gemeinde_name'. Bitte prüfen Sie die Datenstruktur.")
-            except:
-                pass  # Falls ListFields fehlschlägt, ignorieren (z.B. bei ungültigem Layer)
+            except Exception as e:
+                fc_gemeinden.setErrorMessage(f"Fehler beim Lesen der Feature Class: {str(e)}")
 
-        # Prüfen ob Feature Class Flurstücke das Feld "flstkey" enthält
+        # Parameter 3: Feature Class Flurstücke
         if fc_flurstuecke.value:
             try:
                 fields = [f.name.lower() for f in arcpy.ListFields(fc_flurstuecke.value)]
                 if "flstkey" not in fields:
                     fc_flurstuecke.setErrorMessage("Die Feature Class muss ein Feld 'flstkey' enthalten.")
-            except:
-                pass  # Falls ListFields fehlschlägt, ignorieren
+            except Exception as e:
+                fc_flurstuecke.setErrorMessage(f"Fehler beim Lesen der Feature Class: {str(e)}")
 
-        # Prüfen ob Output-Tabelle in einer Geodatabase angelegt wird
-        if output_table.value:
-            output_path = output_table.valueAsText
-            # Prüfen, ob der Pfad eine .gdb enthält
-            if ".gdb" not in output_path.lower():
-                output_table.setErrorMessage("Die Ausgabetabelle muss in einer File-Geodatabase (.gdb) erstellt werden.")
-            else:
-                # Extrahiere den GDB-Pfad und Tabellennamen
-                if os.sep in output_path or "/" in output_path:
-                    gdb_path = output_path.lower().split(".gdb")[0] + ".gdb"
-                    table_name = os.path.basename(output_path)
+        # Parameter 4: Output-Tabelle
+        if not output_table.value:
+            return
+        
+        output_path = output_table.valueAsText
+        
+        # Prüfen, ob der Pfad eine .gdb enthält
+        if ".gdb" not in output_path.lower():
+            output_table.setErrorMessage("Die Ausgabetabelle muss in einer File-Geodatabase (.gdb) erstellt werden.")
+            return
+        
+        # Prüfen ob Pfad-Separator vorhanden ist
+        if not (os.sep in output_path or "/" in output_path):
+            return
+        
+        # Extrahiere den GDB-Pfad und Tabellennamen
+        gdb_path = output_path.lower().split(".gdb")[0] + ".gdb"
+        table_name = os.path.basename(output_path)
 
-                    # Prüfen ob die GDB existiert
-                    if not arcpy.Exists(gdb_path):
-                        output_table.setWarningMessage(f"Die Geodatabase existiert noch nicht: {gdb_path}")
+        # Prüfen ob die GDB existiert
+        if not arcpy.Exists(gdb_path):
+            output_table.setWarningMessage(f"Die Geodatabase existiert noch nicht: {gdb_path}")
 
-                    # Prüfen ob Tabellenname gültig ist (keine Dateiendungen erlaubt)
-                    if not table_name:
-                        output_table.setErrorMessage("Bitte geben Sie einen Tabellennamen an.")
-                    elif "." in table_name:
-                        output_table.setErrorMessage("Der Tabellenname darf keine Dateiendung (z.B. .txt, .csv) enthalten.")
-                    elif " " in table_name:
-                        output_table.setErrorMessage("Der Tabellenname darf keine Leerzeichen enthalten.")
-                    elif not table_name[0].isalpha() and table_name[0] != "_":
-                        output_table.setErrorMessage("Der Tabellenname muss mit einem Buchstaben oder Unterstrich beginnen.")
-                    # Prüfen auf Sonderzeichen (nur Buchstaben, Zahlen und Unterstrich erlaubt)
-                    elif not all(c.isalnum() or c == "_" for c in table_name):
-                        output_table.setErrorMessage("Der Tabellenname darf nur Buchstaben, Zahlen und Unterstriche enthalten.")
-                    # Prüfen auf maximale Länge (File-GDB Limit: 160 Zeichen, aber 64 ist sicherer)
-                    elif len(table_name) > 64:
-                        output_table.setErrorMessage(f"Der Tabellenname ist zu lang ({len(table_name)} Zeichen). Maximum: 64 Zeichen.")
-                    # Warnung bei existierender Tabelle
-                    elif arcpy.Exists(output_path):
-                        output_table.setWarningMessage(f"Die Tabelle '{table_name}' existiert bereits und wird überschrieben.")
+        # Prüfen ob Tabellenname gültig ist
+        if not table_name:
+            output_table.setErrorMessage("Bitte geben Sie einen Tabellennamen an.")
+        elif "." in table_name:
+            output_table.setErrorMessage("Der Tabellenname darf keine Dateiendung (z.B. .txt, .csv) enthalten.")
+        elif " " in table_name:
+            output_table.setErrorMessage("Der Tabellenname darf keine Leerzeichen enthalten.")
+        elif not table_name[0].isalpha() and table_name[0] != "_":
+            output_table.setErrorMessage("Der Tabellenname muss mit einem Buchstaben oder Unterstrich beginnen.")
+        elif not all(c.isalnum() or c == "_" for c in table_name):
+            output_table.setErrorMessage("Der Tabellenname darf nur Buchstaben, Zahlen und Unterstriche enthalten.")
+        elif len(table_name) > 64:
+            output_table.setErrorMessage(f"Der Tabellenname ist zu lang ({len(table_name)} Zeichen). Maximum: 64 Zeichen.")
+        elif arcpy.Exists(output_path):
+            output_table.setWarningMessage(f"Die Tabelle '{table_name}' existiert bereits und wird überschrieben.")
 
         return
 
     def execute(self, parameters, messages):
+        # Reload module during development to pick up changes without restarting ArcGIS Pro
+        importlib.reload(copy_alkis_eigentuemer)
+
         """The source code of the tool."""
+
         # Get Parameters
-        gdb = parameters[0].valueAsText
-        alkis_csv = parameters[1].valueAsText
-        fc_gemeinden = parameters[2].value
-        fc_flurstuecke = parameters[3].value
-        output_table = parameters[4].valueAsText
+        alkis_csv = parameters[0].valueAsText
+        fc_gemeinden = parameters[1].value
+        fc_flurstuecke = parameters[2].value
+        output_table_path = parameters[3].valueAsText
 
-        abrufdatum = datetime.now().strftime("%d.%m.%Y")
+        # Pfad in GDB und Tabellenname zerlegen
+        output_gdb = os.path.dirname(output_table_path)
+        output_table_name = os.path.basename(output_table_path)
 
-        arcpy.env.workspace = gdb
-        arcpy.AddMessage(f"gdb: {gdb}")
-        arcpy.AddMessage(f"alkis_csv: {alkis_csv}")
-        arcpy.AddMessage(f"fc_gemeinden: {fc_gemeinden}")
-        arcpy.AddMessage(f"fc_flurstuecke: {fc_flurstuecke}")
-        arcpy.AddMessage(f"output_table: {output_table}")
 
+        arcpy.env.workspace = output_gdb
+        arcpy.AddMessage("Ausgewählte Parameter:")
+        arcpy.AddMessage(f"\tWorkspace: {output_gdb}")
+        arcpy.AddMessage(f"\tOutput Tabellenname: {output_table_name}")
+        arcpy.AddMessage(f"\tALKIS CSV: {alkis_csv}")
+        arcpy.AddMessage(f"\tGemeinden: {fc_gemeinden}")
+        arcpy.AddMessage(f"\tFlurstücke: {fc_flurstuecke}")
         # Schritt 1: csv bereinigen
-        prepared_csv = copy_alkis_eigentuemer.prepare_csv(alkis_csv)
-        arcpy.AddMessage(f"prepared_csv: {prepared_csv}")
-        arcpy.AddMessage("Testtesttest")
+        arcpy.AddMessage("----------------------------------------")
+        arcpy.AddMessage(f"Schritt 1 -- CSV vorbereiten ...")
+        arcpy.AddMessage("----------------------------------------")
+        prepared_csv, abrufdatum = copy_alkis_eigentuemer.prepare_csv(alkis_csv)
 
-        copy_alkis_eigentuemer.make_eigentuemer_table(fc_gemeinden, fc_flurstuecke, prepared_csv, gdb, abrufdatum)
+        # Schritt 2: Eigentümer-Tabelle erstellen
+        arcpy.AddMessage("----------------------------------------")
+        arcpy.AddMessage(f"Schritt 2 -- Eigentümer-Tabelle erstellen ...")
+        arcpy.AddMessage("----------------------------------------")
+        copy_alkis_eigentuemer.make_eigentuemer_table(prepared_csv, output_gdb, output_table_name, abrufdatum)
 
+        # Schritt 3: räumliche Verknüpfung mit Flurstücken und Gemeinden
+        arcpy.AddMessage("----------------------------------------")
+        arcpy.AddMessage(f"Schritt 3 -- Räumliche Verknüpfung mit Flurstücken und Gemeinden ...")
+        arcpy.AddMessage("----------------------------------------")
+        copy_alkis_eigentuemer.spatial_join_gem_flst(fc_gemeinden, fc_flurstuecke, output_gdb, output_table_name)
         return
 
     def postExecute(self, parameters):
