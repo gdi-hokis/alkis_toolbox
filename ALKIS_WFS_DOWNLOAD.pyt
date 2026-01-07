@@ -27,9 +27,13 @@ import arcpy
 import importlib
 import wfs_field_calculations
 import calc_lage
+import sfl.calc_sfl_nutzung
 import calc_sfl_optimized
+import config.config_loader
 
 importlib.reload(calc_lage)
+importlib.reload(config.config_loader)
+importlib.reload(sfl.calc_sfl_nutzung)
 importlib.reload(calc_sfl_optimized)
 
 
@@ -58,7 +62,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl, compare_feature_classes]
+        self.tools = [wfs_download, calc_lage_tool, calc_sfl, calc_sfl_nutzung, compare_feature_classes]
 
 
 class calc_lage_tool:
@@ -340,6 +344,149 @@ class calc_sfl:
 
             # Output
             parameters[2].value = "✓ Erfolgreich abgeschlossen"
+
+        except Exception as e:
+            arcpy.AddError(f"Fehler: {str(e)}")
+            import traceback
+
+            arcpy.AddError(traceback.format_exc())
+            parameters[2].value = f"✗ Fehler: {str(e)}"
+
+
+class calc_sfl_nutzung:
+    """
+    ArcGIS Toolbox Tool für den Verschnitt von Flurstück und tatsächlicher Nutzung
+    """
+
+    def __init__(self):
+        self.label = "Verschnitt Flurstück & Nutzung"
+        self.description = """
+        Berechnet Schnittflächen (SFL) von den Flurstücken mit der tatsächlichen Nutzung.
+        """
+        self.canRunInBackground = True
+
+    def getParameterInfo(self):
+        """Definiert die Tool-Parameter."""
+
+        # Parameter 1: GDB Path
+        param0 = arcpy.Parameter(
+            displayName="Geodatabase",
+            name="gdb_path",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["File Geodatabase"]
+
+        # Parameter 2: Workspace
+        param1 = arcpy.Parameter(
+            displayName="Arbeitsdatenbank",
+            name="workspace",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        param2 = arcpy.Parameter(
+            displayName="Arbeitsdaten behalten?",
+            name="keep_work_data",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param2.value = True
+
+        param3 = arcpy.Parameter(
+            displayName="größter erlaubter Flächenformindex",
+            name="flaechenformindex",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.value = 40
+        param3.category = "Schwellenwerte Kleinstflächen"
+
+        param4 = arcpy.Parameter(
+            displayName="Maximalgröße zum Merge (m²)",
+            name="max_shred_area",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input",
+        )
+        param4.value = 5
+        param4.category = "Schwellenwerte Kleinstflächen"
+
+        param5 = arcpy.Parameter(
+            displayName="Minimalgröße zum Erhalt (m²)",
+            name="merge_area",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        param5.value = 1
+        param5.category = "Schwellenwerte Kleinstflächen"
+
+        # Parameter 5: Output Message
+        param6 = arcpy.Parameter(
+            displayName="Ergebnis",
+            name="output",
+            datatype="GPString",
+            parameterType="Derived",
+            direction="Output",
+        )
+
+        return [param0, param1, param2, param3, param4, param5, param6]
+
+    def isLicensed(self):
+        """Lizenzprüfung."""
+        # Keine speziellen Extensions erforderlich
+        return True
+
+    def updateParameters(self, parameters):
+        """Aktualisiere Parameter wenn sich andere Parameter ändern."""
+        gdb_param = parameters[0].valueAsText
+
+        if gdb_param and arcpy.Exists(gdb_param + os.sep + "fsk_x_nutzung"):
+            parameters[0].setWarningMessage(
+                "Die Feature-Class 'fsk_x_nutzung' existiert bereits in der Geodatabase und wird überschrieben."
+            )
+        return
+
+    def updateMessages(self, parameters):
+        """Validiere Parameter."""
+        pass
+
+    def execute(self, parameters, messages):
+        """Hauptlogik des Tools."""
+
+        try:
+            # Parse Parameter
+            gdb_path = parameters[0].valueAsText
+            workspace = parameters[1].valueAsText
+            keep_workdata = parameters[2].value
+            flaechenformindex = parameters[3].value
+            max_shred_area = parameters[4].value
+            merge_area = parameters[5].value
+
+            arcpy.AddMessage("\n" + "=" * 70)
+            arcpy.AddMessage("Verschnitt Flurstück und tatsächliche Nutzung")
+            arcpy.AddMessage("=" * 70)
+
+            success = sfl.calc_sfl_nutzung.calculate_sfl_nutzung(
+                gdb_path, workspace, keep_workdata, flaechenformindex, max_shred_area, merge_area
+            )
+
+            if not success:
+                arcpy.AddError("Berechnung fehlgeschlagen!")
+                parameters[6].value = "✗ FEHLER"
+                return
+
+            arcpy.AddMessage("\n" + "=" * 70)
+            arcpy.AddMessage("✓ BERECHNUNG ABGESCHLOSSEN")
+            arcpy.AddMessage("=" * 70)
+
+            # Output
+            parameters[6].value = "✓ Erfolgreich abgeschlossen"
 
         except Exception as e:
             arcpy.AddError(f"Fehler: {str(e)}")

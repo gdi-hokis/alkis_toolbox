@@ -1,0 +1,50 @@
+{
+	"alkis_layers": {
+		"flurstueck": "nora_v_al_flurstueck",
+		"nutzung": "nora_v_al_tatsaechliche_nutzung",
+		"bodenschaetzung": "nora_v_al_bodenschaetzung_f",
+		"bewertung": "nora_v_al_bodenbewertung"
+	},
+
+	"flurstueck": {
+		"flurstueckskennzeichen": "flurstueckskennzeichen",
+		"shape": "SHAPE@",
+		"shape_area": "SHAPE@AREA",
+		"amtliche_flaeche": "amtliche_flaeche",
+		"objectid": "OBJECTID"
+	},
+
+	"nutzung": {
+		"objektart": "objektart",
+		"objektname": "objektname",
+		"unterart_typ": "unterart_typ",
+		"unterart_id": "unterart_id",
+		"unterart_kuerzel": "unterart_kuerzel",
+		"unterart_name": "unterart_name",
+		"eigenname": "eigenname",
+		"weitere_nutzung_id": "weitere_nutzung_id",
+		"weitere_nutzung_name": "weitere_nutzung_name",
+		"klasse": "klasse"
+	},
+
+	"bodenschaetzung": {
+		"bodenart_id": "bodenart_id",
+		"bodenart_name": "bodenart_name",
+		"nutzungsart_id": "nutzungsart_id",
+		"nutzungsart_name": "nutzungsart_name",
+		"entstehung_id": "entstehung_id",
+		"entstehung_name": "entstehung_name",
+		"klima_id": "klima_id",
+		"klima_name": "klima_name",
+		"wasser_id": "wasser_id",
+		"wasser_name": "wasser_name",
+		"bodenstufe_id": "bodenstufe_id",
+		"bodenstufe_name": "bodenstufe_name",
+		"zustand_id": "zustand_id",
+		"zustand_name": "zustand_name",
+		"sonstige_angaben_id": "sonstige_angaben_id",
+		"sonstige_angaben_name": "sonstige_angaben_name",
+		"bodenzahl": "bodenzahl",
+		"ackerzahl": "ackerzahl"
+	}
+}

@@ -493,7 +493,6 @@ class SFLCalculatorOptimized:
             # Mini-Flächen-Filterung: Nur die mergen, die WENIGER als 1 m² bei Verteilung ergeben
             # Prüfe ohne +0.5: geom_area * verbesserung < 1
             if len(df_mini) > 0:
-                # df[]=np.round(df["geom_area"] * df["verbesserung"]).astype(int)
                 # Trennung: erhaltungswürdig (>= 1) vs. zu mergen (< 1)
                 mask_keep = df_mini["sfl"] >= 1
                 df_mini["perimeter"] = df_mini["geometry"].apply(lambda geom: geom.length)
