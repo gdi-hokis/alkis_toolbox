@@ -87,7 +87,7 @@ def make_eigentuemer_table(prepared_csv, gdb, table_name, abrufdatum):
         field_type="DATE"
     )
 
-def spatial_join_gem_flst(gem, flst, gdb, table_name):
+def spatial_join_gem_flst(gem, flst, gdb, table_name, buffer_size):
     """   
     Erstellt einen 500m Buffer um die Gemeinden des Hohenlohekreises und verknüpft
     diese räumlich mit den Flurstücken. Anschließend werden zwei Gemeindefelder zur
@@ -99,11 +99,12 @@ def spatial_join_gem_flst(gem, flst, gdb, table_name):
     :param flst: Feature Class der Flurstücke mit Feld 'flstkey'
     :param gdb: Pfad zur Geodatabase für die Zwischenergebnisse
     :param table_name: Name der Eigentümer-Tabelle, zu der die Gemeindefelder hinzugefügt werden
+    :param buffer_size: Größe des Puffers in Metern
     """
     # Puffer
     arcpy.AddMessage("\tPufferlayer erstellen...")
     arcpy.MakeFeatureLayer_management(gem, "gemeinden_layer")
-    arcpy.Buffer_analysis("gemeinden_layer", "buffer", "500 METER")
+    arcpy.Buffer_analysis("gemeinden_layer", "buffer", f"{buffer_size} METER")
 
     # Spatial Join Flurstücke - Puffer
     arcpy.AddMessage("\tRäumliche Verknüpfung durchführen...")

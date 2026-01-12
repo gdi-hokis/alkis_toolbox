@@ -888,7 +888,18 @@ class alkis_eigentuemer:
             parameterType="Required",
             direction="Output"
         )
-        params = [param0, param1, param2, param3]
+
+        param4 = arcpy.Parameter(
+            displayName="Größe des Puffers",
+            name="buffer_size",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input"
+        )
+        param4.category = "Weitere Parameter"
+        param4.value = 500
+        # nicht negative werte zulassen
+        params = [param0, param1, param2, param3, param4]
         return params
 
     def isLicensed(self):
@@ -991,6 +1002,7 @@ class alkis_eigentuemer:
         fc_gemeinden = parameters[1].value
         fc_flurstuecke = parameters[2].value
         output_table_path = parameters[3].valueAsText
+        buffer_size = parameters[4].value
 
         # Pfad in GDB und Tabellenname zerlegen
         output_gdb = os.path.dirname(output_table_path)
@@ -1020,7 +1032,7 @@ class alkis_eigentuemer:
         arcpy.AddMessage("----------------------------------------")
         arcpy.AddMessage(f"Schritt 3 -- Räumliche Verknüpfung mit Flurstücken und Gemeinden ...")
         arcpy.AddMessage("----------------------------------------")
-        copy_alkis_eigentuemer.spatial_join_gem_flst(fc_gemeinden, fc_flurstuecke, output_gdb, output_table_name)
+        copy_alkis_eigentuemer.spatial_join_gem_flst(fc_gemeinden, fc_flurstuecke, output_gdb, output_table_name, buffer_size)
         return
 
     def postExecute(self, parameters):
