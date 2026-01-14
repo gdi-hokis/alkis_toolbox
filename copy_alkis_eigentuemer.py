@@ -6,7 +6,7 @@ def prepare_csv(input_csv):
     entfernt die erste und die letzten fünf Zeilen (header und Codeerklärungen)
     :param input_csv: Pfad zur Eingabe-CSV-Datei
     """
-    encoding = "utf-8"  # Hier die bekannte Codierung eintragen, z.B. 'utf-8'
+    encoding = "utf-8"
 
     # Temporäre CSV vorbereiten
     output_csv = os.path.join(os.path.dirname(input_csv), "prepared_" + os.path.basename(input_csv))
@@ -32,7 +32,7 @@ def make_eigentuemer_table(prepared_csv, gdb, table_name, abrufdatum):
     :param table_name: Name der zu erstellenden Tabelle
     :param abrufdatum: Abrufdatum als String im Format 'DD.MM.YYYY'
     """
-    arcpy.AddMessage(f"\tErstelle Eigentümer-Tabelle '{table_name}' in Geodatabase '{gdb}'...")
+    arcpy.AddMessage(f"\tErstelle Eigentümer-Tabelle ...")
     arcpy.TableToTable_conversion(prepared_csv, gdb, table_name)
 
     # FLSTKEY berechnen
@@ -89,20 +89,21 @@ def make_eigentuemer_table(prepared_csv, gdb, table_name, abrufdatum):
 
 def spatial_join_gem_flst(gem, flst, gdb, table_name, buffer_size):
     """   
-    Erstellt einen 500m Buffer um die Gemeinden des Hohenlohekreises und verknüpft
-    diese räumlich mit den Flurstücken. Anschließend werden zwei Gemeindefelder zur
-    Eigentümer-Tabelle hinzugefügt:
+    Erstellt einen Puffer (der Größe des Parameters 'buffer_size') um die Gemeinden
+    des gewählten Gebiets und verknüpft diese räumlich mit den Flurstücken. 
+    Anschließend werden zwei Gemeindefelder zur Eigentümer-Tabelle hinzugefügt:
     - 'gemeinde': Gemeindename für Flurstücke innerhalb der Gemeindegrenze
     - 'gemeinde_name': Gemeindename für Flurstücke im 500m Pufferbereich (inkl. Randlagen)
     
     :param gem: Feature Class der Gemeinden mit Feld 'gemeinde_name' und 'kreis_name'
     :param flst: Feature Class der Flurstücke mit Feld 'flstkey'
     :param gdb: Pfad zur Geodatabase für die Zwischenergebnisse
-    :param table_name: Name der Eigentümer-Tabelle, zu der die Gemeindefelder hinzugefügt werden
+    :param table_name: Name der ArcGIS-Eigentümer-Tabelle
     :param buffer_size: Größe des Puffers in Metern
     """
     # Puffer
     arcpy.AddMessage("\tPufferlayer erstellen...")
+    # makefeaturelayer, damit Originallayer unverändert bleibt und Funktion mit shapes funktioniert
     arcpy.MakeFeatureLayer_management(gem, "gemeinden_layer")
     arcpy.Buffer_analysis("gemeinden_layer", "buffer", f"{buffer_size} METER")
 
@@ -128,7 +129,7 @@ def spatial_join_gem_flst(gem, flst, gdb, table_name, buffer_size):
     arcpy.JoinField_management(table_name, "flstkey", "v_al_flurstueck_SpatialJoin", "flstkey", ["gemeinde_name_1"])
     arcpy.AlterField_management(table_name, "gemeinde_name_1", new_field_name="gemeinde_name")
     arcpy.DeleteField_management(table_name,"gemeinde_name_1")
-    
+
     # Zwischengespeicherte feature classes löschen
     arcpy.AddMessage("\tZwischenergebnisse löschen...")
     arcpy.Delete_management("buffer")
