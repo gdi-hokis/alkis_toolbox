@@ -4,6 +4,7 @@ import arcpy
 def prepare_csv(input_csv):
     """
     entfernt die erste und die letzten fünf Zeilen (header und Codeerklärungen)
+    speichert die bereinigte CSV in einer temporären Datei (im gleichen Verzeichnis wie input_csv)
     :param input_csv: Pfad zur Eingabe-CSV-Datei
     """
     encoding = "utf-8"
@@ -14,6 +15,7 @@ def prepare_csv(input_csv):
     with open(input_csv, "r", encoding=encoding) as f:
         lines = f.readlines()
 
+    # Extrahiere Abrufdatum aus der ersten Zeile
     abrufdatum = lines[0][19:29]
     # Entferne die erste und letzten fünf Zeilen
     lines = lines[1:-5]
@@ -23,22 +25,23 @@ def prepare_csv(input_csv):
     return output_csv, abrufdatum
 
 
-def make_eigentuemer_table(prepared_csv, gdb, table_name, abrufdatum):
+def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum):
     """
     konvertiert die Eigentümer-csv in eine ArcGIS-Tabelle
     berechnet die Felder FSK, FLSTKEY, Abrufdatum
     :param prepared_csv: Pfad zur bereinigten CSV-Datei
-    :param gdb: Pfad zur Geodatabase für die Zwischenergebnisse
-    :param table_name: Name der zu erstellenden Tabelle
+    :param gdb: Pfad zur Geodatabase (für die Zwischenergebnisse)
+    :param owner_table: Name der zu erstellenden Tabelle
     :param abrufdatum: Abrufdatum als String im Format 'DD.MM.YYYY'
     """
-    arcpy.AddMessage(f"\tErstelle Eigentümer-Tabelle ...")
-    arcpy.TableToTable_conversion(prepared_csv, gdb, table_name)
+    arcpy.AddMessage("\tErstelle Eigentümer-Tabelle ...")
+    # erstellt Tabelle aus csv und speichert in gdb
+    arcpy.TableToTable_conversion(prepared_csv, gdb, owner_table)
 
-    # FLSTKEY berechnen
+    # Feld 'flurstueck' umformatieren zu 'flstkey' und Tabelle hinzufügen
     arcpy.AddMessage("\tBerechne FLSTKEY...")
     arcpy.CalculateField_management(
-        in_table=table_name,
+        in_table=owner_table,
         field="flstkey",
         expression="calcFLSTKEY(!flurstueck!)",
         expression_type="PYTHON3",
@@ -58,10 +61,10 @@ def make_eigentuemer_table(prepared_csv, gdb, table_name, abrufdatum):
         enforce_domains="NO_ENFORCE_DOMAINS"
     )
 
-    # FSK berechnen
+    # Feld 'FSK' berechnen aus 'FKZ'
     arcpy.AddMessage("\tBerechne FSK...")
     arcpy.CalculateField_management(
-        in_table= table_name,
+        in_table= owner_table,
         field = "FSK",
         expression="replaceZerosInFSK(!FKZ![1:-1])",
         expression_type="PYTHON3",
@@ -77,33 +80,33 @@ def make_eigentuemer_table(prepared_csv, gdb, table_name, abrufdatum):
         enforce_domains="NO_ENFORCE_DOMAINS",
     )
 
-    # Abrufdatum setzen
+    # neues Feld 'Abrufdatum' setzen
     arcpy.AddMessage("\tSetze Abrufdatum...")
     arcpy.CalculateField_management(
-        table_name,
+        owner_table,
         "abrufdatum",
         f'"{abrufdatum}"',
         "PYTHON3",
         field_type="DATE"
     )
 
-def spatial_join_gem_flst(gem, flst, gdb, table_name, buffer_size):
+def spatial_join_gem_flst(gem, flst, gdb, owner_table, buffer_size):
     """   
     Erstellt einen Puffer (der Größe des Parameters 'buffer_size') um die Gemeinden
     des gewählten Gebiets und verknüpft diese räumlich mit den Flurstücken. 
     Anschließend werden zwei Gemeindefelder zur Eigentümer-Tabelle hinzugefügt:
     - 'gemeinde': Gemeindename für Flurstücke innerhalb der Gemeindegrenze
-    - 'gemeinde_name': Gemeindename für Flurstücke im 500m Pufferbereich (inkl. Randlagen)
+    - 'gemeinde_name': Gemeindename für Flurstücke im Pufferbereich
     
-    :param gem: Feature Class der Gemeinden mit Feld 'gemeinde_name' und 'kreis_name'
+    :param gem: Feature Class der Gemeinden mit Feld 'gemeinde_name'
     :param flst: Feature Class der Flurstücke mit Feld 'flstkey'
-    :param gdb: Pfad zur Geodatabase für die Zwischenergebnisse
-    :param table_name: Name der ArcGIS-Eigentümer-Tabelle
+    :param gdb: Pfad zur Geodatabase
+    :param owner_table: Name der ArcGIS-Eigentümer-Tabelle
     :param buffer_size: Größe des Puffers in Metern
     """
     # Puffer
+    # makefeaturelayer, damit ein Originallayer unverändert bleibt und Funktion mit shapefiles funktioniert
     arcpy.AddMessage("\tPufferlayer erstellen...")
-    # makefeaturelayer, damit Originallayer unverändert bleibt und Funktion mit shapes funktioniert
     arcpy.MakeFeatureLayer_management(gem, "gemeinden_layer")
     arcpy.Buffer_analysis("gemeinden_layer", "buffer", f"{buffer_size} METER")
 
@@ -122,13 +125,15 @@ def spatial_join_gem_flst(gem, flst, gdb, table_name, buffer_size):
     )
 
     # Gemeindefelder hinzufügen und umbenennen wie in der Hosted Table
+    # gemeinde_name: Gemeinde in der das Flurstück liegt
+    # gemeinde: Gemeinde im Pufferbereich (mehrere Einträge möglich)
     arcpy.AddMessage("\tGemeindefelder zur Eigentümer-Tabelle hinzufügen...")
-    arcpy.JoinField_management(table_name, "flstkey", flst, "flstkey", ["gemeinde_name"])
-    arcpy.AlterField_management(table_name, "gemeinde_name", new_field_name="gemeinde")
-    arcpy.DeleteField_management(table_name,"gemeinde_name")
-    arcpy.JoinField_management(table_name, "flstkey", "v_al_flurstueck_SpatialJoin", "flstkey", ["gemeinde_name_1"])
-    arcpy.AlterField_management(table_name, "gemeinde_name_1", new_field_name="gemeinde_name")
-    arcpy.DeleteField_management(table_name,"gemeinde_name_1")
+    arcpy.JoinField_management(owner_table, "flstkey", flst, "flstkey", ["gemeinde_name"])
+    arcpy.AlterField_management(owner_table, "gemeinde_name", new_field_name="gemeinde")
+    arcpy.DeleteField_management(owner_table,"gemeinde_name")
+    arcpy.JoinField_management(owner_table, "flstkey", "v_al_flurstueck_SpatialJoin", "flstkey", ["gemeinde_name_1"])
+    arcpy.AlterField_management(owner_table, "gemeinde_name_1", new_field_name="gemeinde_name")
+    arcpy.DeleteField_management(owner_table,"gemeinde_name_1")
 
     # Zwischengespeicherte feature classes löschen
     arcpy.AddMessage("\tZwischenergebnisse löschen...")
