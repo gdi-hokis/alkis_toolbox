@@ -41,9 +41,6 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
     """
 
     try:
-        arcpy.AddMessage("=" * 80)
-        arcpy.AddMessage("CALCULATE_LAGE_REFACTORED - STARTET")
-        arcpy.AddMessage("=" * 80)
 
         # Set workspace
         arcpy.env.workspace = work_gdb
@@ -74,7 +71,9 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 1: Lagebezeichnungspunkte vorbereiten & korrigieren
         # ============================================================================
-        arcpy.AddMessage("\n[STEP 1] Lagebezeichnungspunkte vorbereiten & Gebäude-Fallback-Geometrie...")
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 1 von 6 -- Lagebezeichnungspunkte vorbereiten & Gebäude-Fallback-Geometrie...")
+        arcpy.AddMessage("-" * 40)
 
         # Filter: nur Lagebezeichnungen mit Hausnummern kopieren
         arcpy.FeatureClassToFeatureClass_conversion(gebaeude, work_gdb, "gebaeude_work")
@@ -123,28 +122,35 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
                     cursor.updateRow(row)
                     pts_corrected += 1
 
-        arcpy.AddMessage(f"  ✓ {pts_corrected} Lagebezeichnungen via Gebäude-Mittelpunkt korrigiert")
+        arcpy.AddMessage(f"- {pts_corrected} Lagebezeichnungen via Gebäude-Mittelpunkt korrigiert")
 
         # ============================================================================
         # STEP 2: Spatial Join 1 - Flurstücke ← Lagebezeichnungspunkte
         # ============================================================================
-        arcpy.AddMessage("\n[STEP 2] Spatial Join 1: Flurstücke ← Lagebezeichnungspunkte...")
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 2 von 6 -- Spatial Join 1: Flurstücke ← Lagebezeichnungspunkte...")
+        arcpy.AddMessage("-" * 40)
+
         arcpy.SpatialJoin_analysis(flurstueck, "lage_work", "flst_lage_punkte", "JOIN_ONE_TO_MANY", "KEEP_ALL")
         pts_count = arcpy.GetCount_management("flst_lage_punkte")[0]
-        arcpy.AddMessage(f"  ✓ {pts_count} Flurstück-Lage-Kombinationen aus Punkten erzeugt")
+
+        arcpy.AddMessage(f"- {pts_count} Flurstück-Lage-Kombinationen aus Punkten erzeugt")
 
         # ============================================================================
         # STEP 3: Spatial Join 2 - Flurstücke ← Strasse/Gewann-Polygone (mit negativem Puffer)
         # ============================================================================
-        arcpy.AddMessage("\n[STEP 3] Spatial Join 2: Flurstücke ← Strasse/Gewann-Polygone...")
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 3 von 6 -- Spatial Join 2: Flurstücke ← Strasse/Gewann-Polygone...")
+        arcpy.AddMessage("-" * 40)
 
         # Erstelle negativen Puffer der Gewanne
         arcpy.analysis.PairwiseBuffer(lage_polygon, "lage_polygon_buffered", buffer_distance_or_field="-0.1 Meters")
 
         buffered_count = arcpy.GetCount_management("lage_polygon_buffered")[0]
-        arcpy.AddMessage(f"  ✓ {buffered_count} gepufferte Gewann-Geometrien erstellt (-0.1 Meters)")
+        arcpy.AddMessage(f"- {buffered_count} gepufferte Gewann-Geometrien erstellt (-0.1 Meters)")
 
         # Spatial Join mit gepufferten Gewannen
+        arcpy.AddMessage(f"- Spatial Join Flurstücke ← gepufferte Gewanne...")
         arcpy.SpatialJoin_analysis(
             flurstueck,
             "lage_polygon_buffered",
@@ -154,7 +160,7 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
             match_option="INTERSECT",
         )
         poly_count = arcpy.GetCount_management("flst_lage_polygon")[0]
-        arcpy.AddMessage(f"  ✓ {poly_count} Flurstück-Gewann-Kombinationen aus gepufferten Polygonen erzeugt")
+        arcpy.AddMessage(f"- {poly_count} Flurstück-Gewann-Kombinationen aus gepufferten Polygonen erzeugt")
 
         # ============================================================================
         # STEP 3a: Überprüfung - Flurstücke ohne Gewann-Überschneidung
@@ -167,29 +173,34 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
 
         if int(no_match_count) > 0:
             arcpy.AddWarning(
-                f"  ⚠ {no_match_count} Flurstücke haben u.U. KEINE Lagebezeichnung. Siehe Layer flst_no_gewann_match."
+                f"{no_match_count} Flurstücke haben u.U. KEINE Lagebezeichnung. Siehe Layer flst_no_gewann_match."
             )
 
         # ============================================================================
         # STEP 4: Kombiniere Punkte + Polygone mit JOIN_COUNT-Filter
         # ============================================================================
-        arcpy.AddMessage("\n[STEP 4] Kombiniere Punkte (JOIN_COUNT>0) + Polygone (JOIN_COUNT>0)...")
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 4 von 6 -- Kombiniere Punkte (JOIN_COUNT>0) + Polygone (JOIN_COUNT>0)...")
+        arcpy.AddMessage("-" * 40)
 
         # Filter: Punkte mit JOIN_COUNT > 0 (= haben einen Lage-Match)
         arcpy.FeatureClassToFeatureClass_conversion(
             "flst_lage_punkte", work_gdb, "flst_lage_pts_matched", "JOIN_COUNT > 0"
+        )
+        arcpy.FeatureClassToFeatureClass_conversion(
+            "flst_lage_polygon", work_gdb, "flst_lage_poly_matched", "JOIN_COUNT > 0"
         )
 
         # Markiere Quelle: Punkte = "original", Polygone = "polygon"
         if not arcpy.ListFields("flst_lage_pts_matched", "geometry_source"):
             arcpy.AddField_management("flst_lage_pts_matched", "geometry_source", "TEXT", field_length=50)
         arcpy.CalculateField_management("flst_lage_pts_matched", "geometry_source", "'original'", "PYTHON3")
-        arcpy.AddMessage("  ✓ geometry_source='original' für Punkte gesetzt")
+        arcpy.AddMessage("- geometry_source='original' für Punkte gesetzt")
 
         if not arcpy.ListFields("flst_lage_poly_matched", "geometry_source"):
             arcpy.AddField_management("flst_lage_poly_matched", "geometry_source", "TEXT", field_length=50)
         arcpy.CalculateField_management("flst_lage_poly_matched", "geometry_source", "'polygon'", "PYTHON3")
-        arcpy.AddMessage("  ✓ geometry_source='polygon' für Polygone gesetzt")
+        arcpy.AddMessage("- geometry_source='polygon' für Polygone gesetzt")
 
         # Felder, die nicht in den Merge gehen sollen (temporäre Join-Felder)
         exclude_from_merge = {"FID_flst_lage_punkte", "FID_flst_lage_polygon"}
@@ -241,12 +252,14 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         # Merge mit Field Mapping
         arcpy.Merge_management(["flst_lage_pts_matched", "flst_lage_poly_matched"], "flst_lage_combined", field_mapping)
         combined_count = arcpy.GetCount_management("flst_lage_combined")[0]
-        arcpy.AddMessage(f"  ✓ {combined_count} kombinierte Einträge (Punkte bevorzugt, Polygon als Fallback)")
+        arcpy.AddMessage(f"- {combined_count} kombinierte Einträge (Punkte bevorzugt, Polygon als Fallback)")
 
         # ============================================================================
         # STEP 5: Deduplication per Cursor-Iteration
         # ============================================================================
-        arcpy.AddMessage("\n[STEP 5] Deduplication pro Flurstück...")
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 5 von 6 Deduplication pro Flurstück...")
+        arcpy.AddMessage("-" * 40)
 
         # Hole Spatial Reference von der Quell-Feature Class
         source_fc = "flst_lage_combined"
@@ -287,16 +300,16 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         if fields_to_add:
             try:
                 arcpy.AddFields_management("navigation_lage_deduplicated", fields_to_add)
-                arcpy.AddMessage(f"  ✓ {len(field_mapping)} Felder für Deduplication vorbereitet")
+                arcpy.AddMessage(f"- {len(field_mapping)} Felder für Deduplication vorbereitet")
             except Exception as field_error:
                 # Bei ArcgisPro 3.1 und geringer
-                arcpy.AddWarning(f"  Fehler beim Erstellen von Feldern: {str(field_error)}")
+                arcpy.AddWarning(f"- Fehler beim Erstellen von Feldern: {str(field_error)}")
                 # Fallback: Erstelle Felder einzeln bei Fehler
                 for field_spec in fields_to_add:
                     arcpy.AddField_management("navigation_lage_deduplicated", *field_spec)
 
         # Deduplication-Logik mit Cursor
-        arcpy.AddMessage("  Lese alle Einträge und gruppiere nach Flurstück...")
+        arcpy.AddMessage("- Lese alle Einträge und gruppiere nach Flurstück...")
 
         # Dictionary: (flurstueckskennzeichen, lagebezeichnung) -> True
         # Enthält alle Kombinationen von Flurstück + Lagebezeichnung die in v_al_lagebezeichnung räumlich zusammenpassen
@@ -325,7 +338,7 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
                     flst_lage_lookup[key] = True
 
         lookup_count = len(flst_lage_lookup)
-        arcpy.AddMessage(f"  ✓ {lookup_count} Flurstück-Lagebezeichnung-Kombinationen geladen")
+        arcpy.AddMessage(f"- {lookup_count} Flurstück-Lagebezeichnung-Kombinationen geladen")
 
         # ALLE Felder aus flst_lage_combined lesen (außer OID/SHAPE)
         exclude_fields = {"OBJECTID", "SHAPE", "SHAPE_Length", "SHAPE_Area"}
@@ -368,10 +381,9 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
                 if flst_key:
                     flst_data[flst_key].append(entry)
 
-        arcpy.AddMessage(f"  ✓ {total_entries} Einträge gelesen für {len(flst_data)} Flurstücke")
+        arcpy.AddMessage(f"- {total_entries} Einträge gelesen für {len(flst_data)} Flurstücke")
 
         # Dedupliziere pro Flurstück
-        arcpy.AddMessage("  Starte Deduplication...")
 
         deduplicated_count = 0
         processed_flst = 0
@@ -461,11 +473,11 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
             flst_data[flst_key] = deduplicated_entries
             deduplicated_count += len(deduplicated_entries)
 
-        arcpy.AddMessage(f"  ✓ {processed_flst} Flurstücke verarbeitet, {flst_with_multiple} mit Duplikaten")
-        arcpy.AddMessage(f"  ✓ {streets_removed_by_validation} Straßen durch Validierung entfernt")
-        arcpy.AddMessage(f"  ✓ Finale Anzahl Lageeinträge: {deduplicated_count}")
+        arcpy.AddMessage(f"- {processed_flst} Flurstücke verarbeitet, {flst_with_multiple} mit Duplikaten")
+        arcpy.AddMessage(f"- {streets_removed_by_validation} Straßen durch Validierung entfernt")
+        arcpy.AddMessage(f"- Finale Anzahl Lageeinträge: {deduplicated_count}")
 
-        arcpy.AddMessage("  Schreibe deduplizierte Einträge in Ziel-Feature Class...")
+        arcpy.AddMessage("- Schreibe deduplizierte Einträge in Ziel-Feature Class...")
         written_count = 0
         skipped_count = 0
 
@@ -498,12 +510,15 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
                     insert_cursor.insertRow(row_values)
                     written_count += 1
 
-        arcpy.AddMessage(f"  ✓ {written_count} Lageeinträge geschrieben ({skipped_count} übersprungen)")
+        arcpy.AddMessage(f"- {written_count} Lageeinträge geschrieben ({skipped_count} übersprungen)")
 
         # ============================================================================
         # STEP 6: Ergebnisse in Ziel-Tabellen schreiben
         # ============================================================================
-        arcpy.AddMessage("\n[STEP 6] Ergebnisse in Ziel-Datei schreiben...")
+
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 6 von 6 -- Ergebnisse in Ziel-Datei schreiben...")
+        arcpy.AddMessage("-" * 40)
 
         # Nur diese Felder behalten
         keep_fields = {
@@ -521,6 +536,8 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
 
         # Lösche alle Felder außer den gewünschten (aus navigation_lage_deduplicated)
         arcpy.env.workspace = work_gdb
+        arcpy.AddMessage(f"- Lösche unnötige Felder...")
+
         all_fields = arcpy.ListFields("navigation_lage_deduplicated")
         fields_to_delete = [
             f.name for f in all_fields if f.type not in ["OID", "Geometry"] and f.name not in keep_fields
@@ -530,6 +547,7 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
 
         arcpy.env.workspace = gdb_path
 
+        nav_lage_deduplicated = os.path.join(work_gdb, "navigation_lage_deduplicated")
         nav_lage = "fsk_x_lage"
         nav_lage_path = os.path.join(gdb_path, nav_lage)
         nav_lage_geo = "fsk_x_lage_fc"
@@ -538,27 +556,31 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         geo_exists = arcpy.Exists(nav_lage_geo_path)
         table_exists = arcpy.Exists(nav_lage_path)
 
+        arcpy.AddMessage(f"- Starte Anhängen oder Erstellen...")
+
         if save_fc and not geo_exists:
-            arcpy.CopyFeatures_management(os.path.join(work_gdb, "navigation_lage_deduplicated"), nav_lage_geo_path)
-            arcpy.AddMessage(f"  ✓ fsk_x_lage erstellt in {gdb_path}")
-        elif table_exists:
+            arcpy.CopyFeatures_management(nav_lage_deduplicated, nav_lage_geo_path)
+            arcpy.AddMessage(f"- fsk_x_lage_geo erstellt in {gdb_path}")
+        if not table_exists:
             # Tabelle existiert nicht
-            arcpy.TableToTable_conversion(os.path.join(work_gdb, "navigation_lage_deduplicated"), gdb_path, nav_lage)
-            arcpy.AddMessage(f"  ✓ fsk_x_lage Tabelle erstellt in {gdb_path}")
-        elif save_fc and geo_exists:
+            arcpy.TableToTable_conversion(nav_lage_deduplicated, gdb_path, nav_lage)
+            arcpy.AddMessage(f"- fsk_x_lage Tabelle erstellt in {gdb_path}")
+        if save_fc and geo_exists:
             # Tabelle existiert -> truncate und append mit Fieldmapping
             arcpy.TruncateTable_management(nav_lage_geo_path)
-            arcpy.Append_management("navigation_lage_deduplicated", nav_lage_geo_path, "NO_TEST")
-            arcpy.AddMessage("  ✓ fsk_x_lage aktualisiert")
-        else:
+            arcpy.Append_management(nav_lage_deduplicated, nav_lage_geo_path, "NO_TEST")
+            arcpy.AddMessage("- fsk_x_lage_geo aktualisiert")
+        if table_exists:
             # Tabelle existiert -> truncate und append mit Fieldmapping
             arcpy.TruncateTable_management(nav_lage_path)
-            arcpy.Append_management("navigation_lage_deduplicated", nav_lage_path, "NO_TEST")
-            arcpy.AddMessage("  ✓ fsk_x_lage Tabelle aktualisiert")
+            arcpy.Append_management(nav_lage_deduplicated, nav_lage_path, "NO_TEST")
+            arcpy.AddMessage("- fsk_x_lage Tabelle aktualisiert")
 
         # CLEANUP
         if not keep_workdata:
-            arcpy.AddMessage("\n[CLEANUP] Temporäre Daten löschen...")
+            arcpy.AddMessage("-" * 40)
+            arcpy.AddMessage("CLEANUP -- Temporäre Daten löschen...")
+            arcpy.AddMessage("-" * 40)
             arcpy.env.workspace = work_gdb
 
             temp_datasets = [
@@ -583,12 +605,8 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
                 if arcpy.Exists(dataset):
                     arcpy.Delete_management(dataset)
 
-        arcpy.AddMessage("=" * 80)
-        arcpy.AddMessage("CALCULATE_LAGE_REFACTORED - ABGESCHLOSSEN")
-        arcpy.AddMessage("=" * 80)
-
         return True
 
     except Exception as e:
-        arcpy.AddError(f"FEHLER bei calculate_lage_refactored: {str(e)}")
+        arcpy.AddError(f"FEHLER bei calc_lage: {str(e)}")
         return False

@@ -33,10 +33,7 @@ class DataFrameLoader:
         Lädt alle Flurstücke in einen Pandas DataFrame mit Geometrien.
         Berechnet auch den Verbesserungsfaktor.
         """
-        if self.df_flurstuecke is not None:
-            arcpy.AddMessage("  Flurstücke bereits geladen, überspringe Load")
-            return True
-        arcpy.AddMessage("Lade Flurstücke in DataFrame...")
+        arcpy.AddMessage("- Lade Flurstücke in DataFrame...")
         try:
             flst = FieldConfigLoader.get("flurstueck")
             fsk_field = flst["flurstueckskennzeichen"]
@@ -67,21 +64,18 @@ class DataFrameLoader:
                         )
 
             self.df_flurstuecke = pd.DataFrame(data)
-            arcpy.AddMessage(f"  Geladen: {len(self.df_flurstuecke)} Flurstücke")
+            arcpy.AddMessage(f"- Geladen: {len(self.df_flurstuecke)} Flurstücke")
             return True
 
         except Exception as e:
-            arcpy.AddError(f"Fehler beim Load von Flurstücken: {str(e)}")
+            arcpy.AddError(f"Fehler beim Dataframe-Load von Flurstücken: {str(e)}")
             return False
 
     def load_nutzung_to_dataframe(self, nutzung_table):
         """
         Lädt alle Nutzung Features in DataFrame nach Prepare-Phase.
         """
-        if self.df_nutzung is not None:
-            arcpy.AddMessage("  Nutzung bereits geladen, überspringe Load")
-            return True
-        arcpy.AddMessage("Lade Nutzung Dissolve in DataFrame...")
+        arcpy.AddMessage("- Lade Nutzung Dissolve in DataFrame...")
         try:
 
             # Lade Daten
@@ -151,21 +145,18 @@ class DataFrameLoader:
                     self.geom_cache_nutzung[oid] = geom
 
             self.df_nutzung = pd.DataFrame(data)
-            arcpy.AddMessage(f"  Geladen: {len(self.df_nutzung)} Nutzung Features")
+            arcpy.AddMessage(f"- Geladen: {len(self.df_nutzung)} Nutzung Features")
             return True
 
         except Exception as e:
-            arcpy.AddError(f"Fehler beim Load von Nutzung: {str(e)}")
+            arcpy.AddError(f"Fehler beim Dataframe-Load von Nutzung: {str(e)}")
             return False
 
     def load_bodenschaetzung_to_dataframe(self):
         """
         Lädt alle Bodenschätzung Features in DataFrame nach Prepare-Phase.
         """
-        if self.df_bodenschaetzung is not None:
-            arcpy.AddMessage("  Bodenschätzung bereits geladen, überspringe Load")
-            return True
-        arcpy.AddMessage("Lade Bodenschätzung in DataFrame...")
+        arcpy.AddMessage("- Lade Bodenschätzung in DataFrame...")
         try:
             flst = FieldConfigLoader.get("flurstueck")
             bods = FieldConfigLoader.get("bodenschaetzung")
@@ -259,9 +250,9 @@ class DataFrameLoader:
                     )
 
             self.df_bodenschaetzung = pd.DataFrame(data)
-            arcpy.AddMessage(f"  Geladen: {len(self.df_bodenschaetzung)} Bodenschätzung Features")
+            arcpy.AddMessage(f"- Geladen: {len(self.df_bodenschaetzung)} Bodenschätzung Features")
             return True
 
         except Exception as e:
-            arcpy.AddError(f"Fehler beim Load von Bodenschätzung: {str(e)}")
+            arcpy.AddError(f"Fehler beim Dataframe-Load von Bodenschätzung: {str(e)}")
             return False

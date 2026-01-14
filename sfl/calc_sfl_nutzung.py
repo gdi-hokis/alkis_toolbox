@@ -24,16 +24,10 @@ class SFLCalculatorNutzung(DataFrameLoader):
     def __init__(
         self, gdb_path, workspace, keep_workdata, flaechenformindex, max_shred_area, merge_area, delete_unmerged_mini
     ):
-        """
-        Initialisiert den optimierten SFL Calculator.
-
-        :param gdb_path: Pfad zur Geodatabase
-        :param workspace: Arbeitsverzeichnis für temporäre Daten
-        """
         self.gdb_path = gdb_path
         self.workspace = workspace
         self.max_shred_qm = (
-            max_shred_area  # Schwellenwert für Kleinstflächen - alles wo fläche kleiner aber afl größer ist
+            max_shred_area  # Schwellenwert für Kleinstflächen - alles wo Fläche kleiner aber afl größer ist
         )
 
         self.merge_area = merge_area  # Splitterflächengröße für Kleinstflächen, die ohne Merge in angrenzende Geometrie erhalten bleiben
@@ -58,7 +52,9 @@ class SFLCalculatorNutzung(DataFrameLoader):
         self.flst = self.cfg["flurstueck"]
 
     def prepare_nutzung(self):
-        arcpy.AddMessage("Vorbereitung der Nutzung-Daten...")
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 1 von 6 -- Vorbereitung der Nutzung-Daten...")
+        arcpy.AddMessage("-" * 40)
 
         try:
             nutzung_layer = FieldConfigLoader.get("alkis_layers", "nutzung")
@@ -71,12 +67,13 @@ class SFLCalculatorNutzung(DataFrameLoader):
                 return False
 
             # Verschneiden
+            arcpy.AddMessage("-  Überschneide Nutzung und Flurstück...")
             arcpy.PairwiseIntersect_analysis(
                 [nutzung, flurstueck], "nutzung_intersect", "NO_FID", "0.001 Meters", "INPUT"
             )
-            arcpy.AddMessage("Nutzung-Intersect durchgeführt")
 
             # Dissolve mit Klassifizierungsfeldern
+            arcpy.AddMessage("-  Dissolve...")
             nutz = self.nutz
             flst = self.flst
             dissolve_fields = [
@@ -98,7 +95,6 @@ class SFLCalculatorNutzung(DataFrameLoader):
                 "nutzung_dissolve",
                 ";".join(dissolve_fields),
             )
-            arcpy.AddMessage("Nutzung-Dissolve durchgeführt")
 
             # SFL-Feld hinzufügen
             arcpy.AddField_management(
@@ -108,16 +104,18 @@ class SFLCalculatorNutzung(DataFrameLoader):
             return True
 
         except Exception as e:
-            arcpy.AddError(f"Fehler bei prepare_nutzung: {str(e)}")
+            arcpy.AddError(f"Fehler bei Vorbereitung der Nutzung: {str(e)}")
             return False
 
     def vectorized_calculate_sfl_nutzung(self):
         """
         Vectorisierte Berechnung der SFL für alle Nutzungsflächen.
         """
-        arcpy.AddMessage("Starte vectorisierte SFL-Berechnung (Nutzung)")
 
         try:
+            arcpy.AddMessage("-" * 40)
+            arcpy.AddMessage("Schritt 2 von 6 -- Erstelle pandas-Dataframes...")
+            arcpy.AddMessage("-" * 40)
             # Laden in DataFrame
             if not self.load_flurstuecke_to_dataframe():
                 return False
@@ -133,9 +131,13 @@ class SFLCalculatorNutzung(DataFrameLoader):
             df = df.sort_values(["fsk", "geom_area"])
 
             # Vectorisierte Basis-SFL Berechnung
+            arcpy.AddMessage("- Berechne gerundete SFL mit Verbesserungsfaktor...")
             df["raw_sfl"] = df["geom_area"] * df["verbesserung"]
             df["sfl"] = (df["raw_sfl"] + 0.5).astype(int)  # round-half-up
 
+            arcpy.AddMessage("-" * 40)
+            arcpy.AddMessage("Schritt 3 von 6 -- Vereinige Kleinstflächen geometrisch mit Nachbarn (im Dataframe)...")
+            arcpy.AddMessage("-" * 40)
             df_main, df_mini, df_not_merged = merge_mini_geometries(
                 df, self.max_shred_qm, self.merge_area, self.flaechenformindex
             )
@@ -144,6 +146,9 @@ class SFLCalculatorNutzung(DataFrameLoader):
             else:
                 df_main = pd.concat([df_main, df_not_merged], ignore_index=True)
 
+            arcpy.AddMessage("-" * 40)
+            arcpy.AddMessage("Schritt 4 von 6 -- Verteile die Delta-Flächen...")
+            arcpy.AddMessage("-" * 40)
             # Overlap-Handling: weitere_nutzung_id == 1000
             overlap_mask = df_main["weitere_nutzung_id"] == 1000
             df_main.loc[overlap_mask, "sfl"] = (df_main.loc[overlap_mask, "geom_area"]).astype(int)
@@ -153,6 +158,9 @@ class SFLCalculatorNutzung(DataFrameLoader):
             df_main = self._apply_delta_correction_nutzung(df_main)
 
             # Zurückschreiben in GDB
+            arcpy.AddMessage("-" * 40)
+            arcpy.AddMessage("Schritt 5 von 6 -- Übertrage Dataframe-Ergebnisse in nutzung_dissolve...")
+            arcpy.AddMessage("-" * 40)
             self._write_sfl_to_gdb_nutzung(df_main, df_mini)
 
             arcpy.AddMessage("--------Vectorisierte SFL-Berechnung (Nutzung) abgeschlossen--------")
@@ -292,6 +300,10 @@ class SFLCalculatorNutzung(DataFrameLoader):
 
     def finalize_results(self):
         """Übernimmt Ergebnisse in Navigation-Tabellen mit Fieldmapping und Tabellen-Erstellung."""
+        # Zurückschreiben in GDB
+        arcpy.AddMessage("-" * 40)
+        arcpy.AddMessage("Schritt 6 von 6 -- Schreibe Ergebnisse in Ziel-GDB...")
+        arcpy.AddMessage("-" * 40)
         try:
             nav_nutzung = os.path.join(self.gdb_path, "fsk_x_nutzung")
             nutz = self.nutz
@@ -338,6 +350,9 @@ class SFLCalculatorNutzung(DataFrameLoader):
                 arcpy.AddMessage("fsk_x_nutzung aktualisiert")
 
             if not self.keep_workdata:
+                arcpy.AddMessage("-" * 40)
+                arcpy.AddMessage("CLEANUP -- Lösche Zwischenergebnisse...")
+                arcpy.AddMessage("-" * 40)
                 arcpy.Delete_management("nutzung_intersect")
                 arcpy.Delete_management("nutzung_dissolve")
                 arcpy.AddMessage("Temporäre Arbeitstabellen gelöscht")
@@ -355,17 +370,21 @@ def calculate_sfl_nutzung(
     """
     :return: True bei Erfolg, False bei Fehler
     """
-    calculator = SFLCalculatorNutzung(
-        gdb_path, workspace, keep_workdata, flaechenformindex, max_shred_area, merge_area, delete_unmerged_mini
-    )
+    try:
+        calculator = SFLCalculatorNutzung(
+            gdb_path, workspace, keep_workdata, flaechenformindex, max_shred_area, merge_area, delete_unmerged_mini
+        )
 
-    # if not calculator.prepare_nutzung():
-    #     return False
+        if not calculator.prepare_nutzung():
+            return False
 
-    if not calculator.vectorized_calculate_sfl_nutzung():
+        if not calculator.vectorized_calculate_sfl_nutzung():
+            return False
+
+        if not calculator.finalize_results():
+            return False
+
+        return True
+    except Exception as e:
+        arcpy.AddError(f"Fehler bei calculate_sfl_nutzung: {str(e)}")
         return False
-
-    if not calculator.finalize_results():
-        return False
-
-    return True

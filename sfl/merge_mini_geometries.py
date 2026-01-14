@@ -19,7 +19,7 @@ try:
     SHAPELY_AVAILABLE = True
 except ImportError:
     SHAPELY_AVAILABLE = False
-    arcpy.AddWarning("Shapely nicht verfügbar - Mini-Flächen-Merge wird übersprungen")
+    arcpy.AddError("Shapely nicht verfügbar - Mini-Flächen-Merge wird übersprungen")
 
 
 def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_type="nutzung"):
@@ -33,7 +33,7 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
     df_mini = df[df["is_mini"] == True].copy()
     df_main = df[df["is_mini"] == False].copy()
 
-    arcpy.AddMessage(f"  Identifiziert {len(df_mini)} Kleinstflächen zur Verarbeitung")
+    arcpy.AddMessage(f"- Identifiziert {len(df_mini)} Kleinstflächen zur Verarbeitung")
 
     df_mini_not_merged = pd.DataFrame()
 
@@ -50,8 +50,8 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
         df_mini_merge = df_mini[(~mask_keep) | (~mask_real_feature)].copy()
 
         arcpy.AddMessage(
-            f"    {len(df_mini_keep)} Mini-Flächen erhalten (>= {merge_area} m² und Flächenformindex <{flaechenformindex}), "
-            f"{len(df_mini_merge)} Mini-Flächen werden gemergt (< {merge_area} m²) oder Flächenformindex >={flaechenformindex})"
+            f"- {len(df_mini_keep)} Mini-Flächen erhalten (>= {merge_area} m² und Flächenformindex <{flaechenformindex}), "
+            f"- {len(df_mini_merge)} Mini-Flächen werden gemergt (< {merge_area} m²) oder Flächenformindex >={flaechenformindex})"
         )
 
         # Erhaltungswürdige Mini-Flächen zu Main hinzufügen
@@ -73,8 +73,6 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
 
 
 def merge(df_main, df_mini, calc_type):
-
-    arcpy.AddMessage("  Merge Kleinstflächen mit Hauptflächen...")
 
     start_time = time.time()
     merged_oids = set()

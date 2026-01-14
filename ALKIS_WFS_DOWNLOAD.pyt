@@ -66,14 +66,14 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl_bodenschaetzung, calc_sfl_nutzung, compare_feature_classes]
+        self.tools = [wfs_download, calc_lage, calc_sfl_nutzung, calc_sfl_bodenschaetzung, compare_feature_classes]
 
 
-class calc_lage_tool:
+class calc_lage:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Lagebezeichnungen zuordnen"
-        self.description = "Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine Navigation_Lage Tabelle"
+        self.label = "Verschnitt Flurstück & Lagebezeichnung"
+        self.description = "Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine fsk_x_lage Tabelle"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
@@ -139,22 +139,13 @@ class calc_lage_tool:
         save_fc = parameters[3].value
 
         try:
-            arcpy.AddMessage(f"Starte Lagebezeichnungsberechnung für {gdb_path}")
-
             success = lage.calc_lage.calculate_lage(work_folder, gdb_path, keep_workdata, save_fc)
 
-            if success:
-                arcpy.AddMessage("Lagebezeichnungsberechnung erfolgreich abgeschlossen")
-            else:
-                arcpy.AddError("Lagebezeichnungsberechnung fehlgeschlagen")
-
-            return success
+            if not success:
+                return False
 
         except Exception as e:
-            arcpy.AddError(f"Fehler bei Lagebezeichnungsberechnung: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
+            arcpy.AddError(f"Fehler beim Aufruf des Werkzeugs Verschnitt Flurstück & Lagebezeichnung: {str(e)}")
             return False
 
 
@@ -403,10 +394,6 @@ class calc_sfl_bodenschaetzung:
             merge_area = parameters[5].value
             delete_not_merged_minis = parameters[6].value
 
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("Verschnitt Flurstück und tatsächliche Nutzung")
-            arcpy.AddMessage("=" * 70)
-
             success = sfl.calc_sfl_bodenschaetzung.calculate_sfl_bodenschaetzung(
                 gdb_path,
                 workspace,
@@ -418,23 +405,10 @@ class calc_sfl_bodenschaetzung:
             )
 
             if not success:
-                arcpy.AddError("Berechnung fehlgeschlagen!")
-                parameters[7].value = "✗ FEHLER"
-                return
-
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("✓ BERECHNUNG ABGESCHLOSSEN")
-            arcpy.AddMessage("=" * 70)
-
-            # Output
-            parameters[6].value = "✓ Erfolgreich abgeschlossen"
+                return False
 
         except Exception as e:
             arcpy.AddError(f"Fehler: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            parameters[2].value = f"✗ Fehler: {str(e)}"
 
 
 class calc_sfl_nutzung:
@@ -520,16 +494,7 @@ class calc_sfl_nutzung:
         param6.value = True
         param6.category = "Schwellenwerte Kleinstflächen"
 
-        # Parameter 5: Output Message
-        param7 = arcpy.Parameter(
-            displayName="Ergebnis",
-            name="output",
-            datatype="GPString",
-            parameterType="Derived",
-            direction="Output",
-        )
-
-        return [param0, param1, param2, param3, param4, param5, param6, param7]
+        return [param0, param1, param2, param3, param4, param5, param6]
 
     def isLicensed(self):
         """Lizenzprüfung."""
@@ -537,17 +502,18 @@ class calc_sfl_nutzung:
         return True
 
     def updateParameters(self, parameters):
-        """Aktualisiere Parameter wenn sich andere Parameter ändern."""
-        gdb_param = parameters[0].valueAsText
-
-        if gdb_param and arcpy.Exists(gdb_param + os.sep + "fsk_x_nutzung"):
-            parameters[0].setWarningMessage(
-                "Die Feature-Class 'fsk_x_nutzung' existiert bereits in der Geodatabase und wird überschrieben."
-            )
-        return
+        pass
 
     def updateMessages(self, parameters):
         """Validiere Parameter."""
+        gdb_param = parameters[0].valueAsText
+
+        if gdb_param:
+            gdb_path = os.path.join(gdb_param, "fsk_x_nutzung")
+            if arcpy.Exists(gdb_path):
+                parameters[0].setWarningMessage(
+                    "Die Feature-Class 'fsk_x_nutzung' existiert bereits in der Geodatabase und wird überschrieben."
+                )
         pass
 
     def execute(self, parameters, messages):
@@ -563,10 +529,6 @@ class calc_sfl_nutzung:
             merge_area = parameters[5].value
             not_merged_mini_delete = parameters[6].value
 
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("Verschnitt Flurstück und tatsächliche Nutzung")
-            arcpy.AddMessage("=" * 70)
-
             success = sfl.calc_sfl_nutzung.calculate_sfl_nutzung(
                 gdb_path,
                 workspace,
@@ -578,23 +540,10 @@ class calc_sfl_nutzung:
             )
 
             if not success:
-                arcpy.AddError("Berechnung fehlgeschlagen!")
-                parameters[7].value = "✗ FEHLER"
-                return
-
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("✓ BERECHNUNG ABGESCHLOSSEN")
-            arcpy.AddMessage("=" * 70)
-
-            # Output
-            parameters[6].value = "✓ Erfolgreich abgeschlossen"
+                return False
 
         except Exception as e:
-            arcpy.AddError(f"Fehler: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            parameters[2].value = f"✗ Fehler: {str(e)}"
+            arcpy.AddError(f"Fehler beim Einlesen des Werkzeugs Verschnitt Flurstück & Nutzung: {str(e)}")
 
 
 class wfs_download:
