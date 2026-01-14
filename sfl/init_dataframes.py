@@ -74,7 +74,7 @@ class DataFrameLoader:
             arcpy.AddError(f"Fehler beim Load von Flurstücken: {str(e)}")
             return False
 
-    def load_nutzung_to_dataframe(self):
+    def load_nutzung_to_dataframe(self, nutzung_table):
         """
         Lädt alle Nutzung Features in DataFrame nach Prepare-Phase.
         """
@@ -83,21 +83,6 @@ class DataFrameLoader:
             return True
         arcpy.AddMessage("Lade Nutzung Dissolve in DataFrame...")
         try:
-            # Bestimme welche Tabelle verwendet werden soll
-            nutzung_table = None
-
-            # Strategie 1: Versuche nutzung_dissolve zu finden
-            if arcpy.Exists("nutzung_dissolve"):
-                nutzung_table = "nutzung_dissolve"
-                arcpy.AddMessage("  Verwende nutzung_dissolve")
-            # Strategie 2: Fallback auf fsk_x_nutzung
-            elif arcpy.Exists(os.path.join(self.gdb_path, "fsk_x_nutzung")):
-                nutzung_table = os.path.join(self.gdb_path, "fsk_x_nutzung")
-                arcpy.AddMessage("  nutzung_dissolve nicht gefunden, verwende fsk_x_nutzung als Fallback")
-            # Strategie 3: Fehler
-            else:
-                arcpy.AddError("Fehler: Weder nutzung_dissolve noch fsk_x_nutzung gefunden")
-                return False
 
             # Lade Daten
             flst = FieldConfigLoader.get("flurstueck")

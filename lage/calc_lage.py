@@ -19,9 +19,10 @@
 import os
 from collections import defaultdict
 import arcpy
+from config.config_loader import FieldConfigLoader
 
 
-def calculate_lage(work_gdb, gdb_path):
+def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
     """
     REFAKTORIERTE VERSION - Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken
     und erstellt eine Navigation_Lage Tabelle mit geometry_source-Tracking.
@@ -48,20 +49,37 @@ def calculate_lage(work_gdb, gdb_path):
         arcpy.env.workspace = work_gdb
         arcpy.env.overwriteOutput = True
 
+        cfg = FieldConfigLoader.load_config()
+        layers = cfg.get("alkis_layers")
+
+        lage_point = os.path.join(gdb_path, layers["lagebezechnung"])
+        gebaeude = os.path.join(gdb_path, layers["gebaeude"])
+        flurstueck = os.path.join(gdb_path, layers["flurstueck"])
+        lage_polygon = os.path.join(gdb_path, layers["strasse_gewann"])
+
+        lage_fi = FieldConfigLoader.get("lagebezeichnung")
+        hausnummer = lage_fi["hausnummer"]
+        lage_id = lage_fi["lage_id"]
+        lagebezeichnung = lage_fi["lagebezeichnung"]
+        gesamtschluessel = lage_fi["gesamtschluessel"]
+        lageschluessel = lage_fi["lageschluessel"]
+        nummer = lage_fi["nummer"]
+        zusatz = lage_fi["zusatz"]
+        gebaeude_fi = FieldConfigLoader.get("gebaeude")
+        gebaeude_objectid = gebaeude_fi["object_id"]
+        gebaeudefunktion_name = gebaeude_fi["gebaeudefunktion_name"]
+        flurstueck_fi = FieldConfigLoader.get("flurstueck")
+        flurstueckskennzeichen = flurstueck_fi["flurstueckskennzeichen"]
+
         # ============================================================================
         # STEP 1: Lagebezeichnungspunkte vorbereiten & korrigieren
         # ============================================================================
         arcpy.AddMessage("\n[STEP 1] Lagebezeichnungspunkte vorbereiten & Gebäude-Fallback-Geometrie...")
 
-        lage_point = os.path.join(gdb_path, "nora_v_al_lagebezeichnung")
-        gebaeude = os.path.join(gdb_path, "nora_v_al_gebaeude")
-        flurstueck = os.path.join(gdb_path, "nora_v_al_flurstueck")
-        lage_polygon = os.path.join(gdb_path, "nora_v_al_strasse_gewann")
-
         # Filter: nur Lagebezeichnungen mit Hausnummern kopieren
         arcpy.FeatureClassToFeatureClass_conversion(gebaeude, work_gdb, "gebaeude_work")
         arcpy.FeatureClassToFeatureClass_conversion(
-            lage_point, work_gdb, "lage_work", "hausnummer <> ' ' And hausnummer IS NOT NULL"
+            lage_point, work_gdb, "lage_work", f"{hausnummer} <> ' ' And {hausnummer} IS NOT NULL"
         )
 
         # Punkte außerhalb ihrer Gebäude identifizieren
@@ -73,28 +91,32 @@ def calculate_lage(work_gdb, gdb_path):
 
         # Gebäude-Link für außerhalb liegende Punkte
         arcpy.JoinField_management(
-            "lage_outside_geb", "lage_id", "gebaeude_work", "lage_id", "object_id;gebaeudefunktion_name"
+            "lage_outside_geb", lage_id, "gebaeude_work", lage_id, f"{gebaeude_objectid};{gebaeudefunktion_name}"
         )
 
         # Gebäude-Mittelpunkte für Punkte mit Gebäude-Link
-        arcpy.MakeFeatureLayer_management("lage_outside_geb", "lage_mit_gebid", "object_id IS NOT NULL")
+        arcpy.MakeFeatureLayer_management("lage_outside_geb", "lage_mit_gebid", f"{gebaeude_objectid} IS NOT NULL")
         arcpy.JoinField_management(
-            "gebaeude_work", "object_id", "lage_mit_gebid", "object_id", "lage_id;lagebezeichnung;hausnummer"
+            "gebaeude_work",
+            gebaeude_objectid,
+            "lage_mit_gebid",
+            gebaeude_objectid,
+            f"{lage_id};{lagebezeichnung};{hausnummer}",
         )
-        arcpy.MakeFeatureLayer_management("gebaeude_work", "gebaeude_to_convert", "lage_id_1 IS NOT NULL")
+        arcpy.MakeFeatureLayer_management("gebaeude_work", "gebaeude_to_convert", f"{lage_id}_1 IS NOT NULL")
         arcpy.FeatureToPoint_management("gebaeude_to_convert", "gebaeude_point", "INSIDE")
 
         # Geometrien updaten mit Gebäude-Mittelpunkten
-        arcpy.JoinField_management("lage_work", "lage_id", "gebaeude_point", "lage_id_1", "lage_id_1")
+        arcpy.JoinField_management("lage_work", lage_id, "gebaeude_point", f"{lage_id}_1", f"{lage_id}_1")
 
         update_geometries = {}
         pts_corrected = 0
-        with arcpy.da.SearchCursor("gebaeude_point", ["lage_id_1", "SHAPE@"]) as cursor:
+        with arcpy.da.SearchCursor("gebaeude_point", [f"{lage_id}_1", "SHAPE@"]) as cursor:
             for row in cursor:
                 if row[0] is not None:
                     update_geometries[row[0]] = row[1]
 
-        with arcpy.da.UpdateCursor("lage_work", ["lage_id", "SHAPE@"], "lage_id_1 IS NOT NULL") as cursor:
+        with arcpy.da.UpdateCursor("lage_work", [lage_id, "SHAPE@"], f"{lage_id}_1 IS NOT NULL") as cursor:
             for row in cursor:
                 if row[0] in update_geometries:
                     row[1] = update_geometries[row[0]]
@@ -156,11 +178,6 @@ def calculate_lage(work_gdb, gdb_path):
         # Filter: Punkte mit JOIN_COUNT > 0 (= haben einen Lage-Match)
         arcpy.FeatureClassToFeatureClass_conversion(
             "flst_lage_punkte", work_gdb, "flst_lage_pts_matched", "JOIN_COUNT > 0"
-        )
-
-        # Filter: Polygone mit JOIN_COUNT > 0 (= haben einen Lage-Match)
-        arcpy.FeatureClassToFeatureClass_conversion(
-            "flst_lage_polygon", work_gdb, "flst_lage_poly_matched", "JOIN_COUNT > 0"
         )
 
         # Markiere Quelle: Punkte = "original", Polygone = "polygon"
@@ -297,7 +314,7 @@ def calculate_lage(work_gdb, gdb_path):
 
         # Lese die Kombinationen ein
         with arcpy.da.SearchCursor(
-            "flst_all_lage_validation", ["flurstueckskennzeichen", "lagebezeichnung"], "JOIN_COUNT > 0"
+            "flst_all_lage_validation", [flurstueckskennzeichen, lagebezeichnung], "JOIN_COUNT > 0"
         ) as cursor:
             for row in cursor:
                 flst_kz = row[0]
@@ -339,15 +356,15 @@ def calculate_lage(work_gdb, gdb_path):
                     entry[field_name] = row[i + 1]
 
                 # Zusätzlich die Dedup-Keys extrahieren für die Logik
-                entry["flst"] = entry.get("flurstueckskennzeichen", None)
-                entry["lage_bez"] = entry.get("lagebezeichnung", None)
-                entry["ges_schluessel"] = entry.get("gesamtschluessel", None)
-                entry["hausnummer"] = entry.get("hausnummer", None)
-                entry["lage_id"] = entry.get("lage_id", None)
+                entry["flst"] = entry.get(flurstueckskennzeichen, None)
+                entry["lage_bez"] = entry.get(lagebezeichnung, None)
+                entry["ges_schluessel"] = entry.get(gesamtschluessel, None)
+                entry["hausnummer"] = entry.get(hausnummer, None)
+                entry["lage_id"] = entry.get(lage_id, None)
                 entry["geom_source"] = entry.get("geometry_source", "unknown")
 
                 # Gruppiere nach Flurstück
-                flst_key = entry.get("flurstueckskennzeichen")
+                flst_key = entry.get(flurstueckskennzeichen)
                 if flst_key:
                     flst_data[flst_key].append(entry)
 
@@ -490,14 +507,14 @@ def calculate_lage(work_gdb, gdb_path):
 
         # Nur diese Felder behalten
         keep_fields = {
-            "flurstueckskennzeichen",
-            "lagebezeichnung",
-            "lageschluessel",
-            "hausnummer",
+            flurstueckskennzeichen,
+            lagebezeichnung,
+            lageschluessel,
+            hausnummer,
             "abrufdatum",
-            "gesamtschluessel",
-            "nummer",
-            "zusatz",
+            gesamtschluessel,
+            nummer,
+            zusatz,
             "Shape_Area",
             "Shape_Length",
         }
@@ -513,47 +530,58 @@ def calculate_lage(work_gdb, gdb_path):
 
         arcpy.env.workspace = gdb_path
 
-        # Feature Class erstellen/updaten
-        if arcpy.Exists("navigation_lage"):
-            arcpy.TruncateTable_management("navigation_lage")
-            arcpy.AddMessage("  ✓ navigation_lage truncated")
-            arcpy.Append_management(
-                os.path.join(work_gdb, "navigation_lage_deduplicated"), "navigation_lage", "NO_TEST"
-            )
-            arcpy.AddMessage("  ✓ Daten in navigation_lage appended")
+        nav_lage = "fsk_x_lage"
+        nav_lage_path = os.path.join(gdb_path, nav_lage)
+        nav_lage_geo = "fsk_x_lage_fc"
+        nav_lage_geo_path = os.path.join(gdb_path, nav_lage_geo)
+
+        geo_exists = arcpy.Exists(nav_lage_geo_path)
+        table_exists = arcpy.Exists(nav_lage_path)
+
+        if save_fc and not geo_exists:
+            arcpy.CopyFeatures_management(os.path.join(work_gdb, "navigation_lage_deduplicated"), nav_lage_geo_path)
+            arcpy.AddMessage(f"  ✓ fsk_x_lage erstellt in {gdb_path}")
+        elif table_exists:
+            # Tabelle existiert nicht
+            arcpy.TableToTable_conversion(os.path.join(work_gdb, "navigation_lage_deduplicated"), gdb_path, nav_lage)
+            arcpy.AddMessage(f"  ✓ fsk_x_lage Tabelle erstellt in {gdb_path}")
+        elif save_fc and geo_exists:
+            # Tabelle existiert -> truncate und append mit Fieldmapping
+            arcpy.TruncateTable_management(nav_lage_geo_path)
+            arcpy.Append_management("navigation_lage_deduplicated", nav_lage_geo_path, "NO_TEST")
+            arcpy.AddMessage("  ✓ fsk_x_lage aktualisiert")
         else:
-            arcpy.FeatureClassToFeatureClass_conversion(
-                os.path.join(work_gdb, "navigation_lage_deduplicated"), gdb_path, "navigation_lage"
-            )
-            arcpy.AddMessage("  ✓ navigation_lage erstellt")
+            # Tabelle existiert -> truncate und append mit Fieldmapping
+            arcpy.TruncateTable_management(nav_lage_path)
+            arcpy.Append_management("navigation_lage_deduplicated", nav_lage_path, "NO_TEST")
+            arcpy.AddMessage("  ✓ fsk_x_lage Tabelle aktualisiert")
 
-        # ============================================================================
         # CLEANUP
-        # ============================================================================
-        arcpy.AddMessage("\n[CLEANUP] Temporäre Daten löschen...")
-        arcpy.env.workspace = work_gdb
+        if not keep_workdata:
+            arcpy.AddMessage("\n[CLEANUP] Temporäre Daten löschen...")
+            arcpy.env.workspace = work_gdb
 
-        temp_datasets = [
-            "gebaeude_work",
-            "lage_work",
-            "flst_all_lage_validation",
-            "flst_lage_combined",
-            "flst_lage_pts_matched",
-            "flst_lage_poly_matched",
-            "lage_polygon_buffered",
-            "lage_work_VIEW",
-            "lage_outside_geb",
-            "lage_mit_gebid",
-            "gebaeude_point",
-            "flst_lage_punkte",
-            "flst_lage_polygon",
-            "flst_lage_union",
-            "navigation_lage_deduplicated",
-        ]
+            temp_datasets = [
+                "gebaeude_work",
+                "lage_work",
+                "flst_all_lage_validation",
+                "flst_lage_combined",
+                "flst_lage_pts_matched",
+                "flst_lage_poly_matched",
+                "lage_polygon_buffered",
+                "lage_work_VIEW",
+                "lage_outside_geb",
+                "lage_mit_gebid",
+                "gebaeude_point",
+                "flst_lage_punkte",
+                "flst_lage_polygon",
+                "flst_lage_union",
+                "navigation_lage_deduplicated",
+            ]
 
-        for dataset in temp_datasets:
-            if arcpy.Exists(dataset):
-                arcpy.Delete_management(dataset)
+            for dataset in temp_datasets:
+                if arcpy.Exists(dataset):
+                    arcpy.Delete_management(dataset)
 
         arcpy.AddMessage("=" * 80)
         arcpy.AddMessage("CALCULATE_LAGE_REFACTORED - ABGESCHLOSSEN")

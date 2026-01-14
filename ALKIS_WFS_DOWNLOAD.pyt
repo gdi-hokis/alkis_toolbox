@@ -26,15 +26,19 @@ import requests
 import arcpy
 import importlib
 import wfs_field_calculations
-import calc_lage
+import lage.calc_lage
 import sfl.calc_sfl_nutzung
-import calc_sfl_optimized
+import sfl.calc_sfl_bodenschaetzung
 import config.config_loader
+import sfl.init_dataframes
+import sfl.merge_mini_geometries
 
-importlib.reload(calc_lage)
+importlib.reload(lage.calc_lage)
 importlib.reload(config.config_loader)
+importlib.reload(sfl.init_dataframes)
 importlib.reload(sfl.calc_sfl_nutzung)
-importlib.reload(calc_sfl_optimized)
+importlib.reload(sfl.calc_sfl_bodenschaetzung)
+importlib.reload(sfl.merge_mini_geometries)
 
 
 # Konfigurationsparameter
@@ -62,7 +66,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl, calc_sfl_nutzung, compare_feature_classes]
+        self.tools = [wfs_download, calc_lage_tool, calc_sfl_bodenschaetzung, calc_sfl_nutzung, compare_feature_classes]
 
 
 class calc_lage_tool:
@@ -89,7 +93,25 @@ class calc_lage_tool:
             direction="Input",
         )
 
-        params = [param0, param1]
+        param2 = arcpy.Parameter(
+            displayName="Zwischenergebnisse speichern?",
+            name="keep_work_data",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param2.value = True
+
+        param3 = arcpy.Parameter(
+            displayName="Mit Geometrie speichern?",
+            name="save_fc",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.value = True
+
+        params = [param0, param1, param2, param3]
         return params
 
     def isLicensed(self):
@@ -113,11 +135,13 @@ class calc_lage_tool:
     def execute(self, parameters, _messages):
         gdb_path = parameters[0].valueAsText
         work_folder = parameters[1].valueAsText
+        keep_workdata = parameters[2].value
+        save_fc = parameters[3].value
 
         try:
             arcpy.AddMessage(f"Starte Lagebezeichnungsberechnung für {gdb_path}")
 
-            success = calc_lage.calculate_lage(work_folder, gdb_path)
+            success = lage.calc_lage.calculate_lage(work_folder, gdb_path, keep_workdata, save_fc)
 
             if success:
                 arcpy.AddMessage("Lagebezeichnungsberechnung erfolgreich abgeschlossen")
@@ -259,16 +283,15 @@ class compare_feature_classes(object):
         )
 
 
-class calc_sfl:
+class calc_sfl_bodenschaetzung:
     """
     ArcGIS Toolbox Tool für SFL- und EMZ-Berechnung (optimierte Version).
     """
 
     def __init__(self):
-        self.label = "SFL & EMZ Berechnung (optimiert)"
+        self.label = "Verschnitt Flurstück und Bodenschätzung"
         self.description = """
-        Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) 
-        mit optimierter Pandas-Vectorisierung (~5-10x schneller).
+        Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) von den Flurstücken mit der Bodenschätzung und Bodenschätzungsbewertung.
         """
         self.canRunInBackground = True
 
@@ -294,8 +317,57 @@ class calc_sfl:
             direction="Input",
         )
 
-        # Parameter 5: Output Message
         param2 = arcpy.Parameter(
+            displayName="Arbeitsdaten behalten?",
+            name="keep_work_data",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param2.value = True
+
+        param3 = arcpy.Parameter(
+            displayName="größter erlaubter Flächenformindex",
+            name="flaechenformindex",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.value = 40
+        param3.category = "Schwellenwerte Kleinstflächen"
+
+        param4 = arcpy.Parameter(
+            displayName="Maximalgröße zum Merge (m²)",
+            name="max_shred_area",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input",
+        )
+        param4.value = 5
+        param4.category = "Schwellenwerte Kleinstflächen"
+
+        param5 = arcpy.Parameter(
+            displayName="Minimalgröße zum Erhalt (m²)",
+            name="merge_area",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        param5.value = 2
+        param5.category = "Schwellenwerte Kleinstflächen"
+
+        param6 = arcpy.Parameter(
+            displayName="Nicht gemergte Kleinstflächen löschen?",
+            name="delete_not_merged_mini",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param6.value = True
+        param6.category = "Schwellenwerte Kleinstflächen"
+
+        # Parameter 5: Output Message
+        param7 = arcpy.Parameter(
             displayName="Ergebnis",
             name="output",
             datatype="GPString",
@@ -303,7 +375,7 @@ class calc_sfl:
             direction="Output",
         )
 
-        return [param0, param1, param2]
+        return [param0, param1, param2, param3, param4, param5, param6, param7]
 
     def isLicensed(self):
         """Lizenzprüfung."""
@@ -325,17 +397,29 @@ class calc_sfl:
             # Parse Parameter
             gdb_path = parameters[0].valueAsText
             workspace = parameters[1].valueAsText
+            keep_workdata = parameters[2].value
+            flaechenformindex = parameters[3].value
+            max_shred_area = parameters[4].value
+            merge_area = parameters[5].value
+            delete_not_merged_minis = parameters[6].value
 
             arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("SFL & EMZ BERECHNUNG - OPTIMIERTE VERSION")
+            arcpy.AddMessage("Verschnitt Flurstück und tatsächliche Nutzung")
             arcpy.AddMessage("=" * 70)
 
-            arcpy.AddMessage("\nStarte OPTIMIERTE Berechnung...")
-            success = calc_sfl_optimized.calculate_sfl_optimized(gdb_path, workspace)
+            success = sfl.calc_sfl_bodenschaetzung.calculate_sfl_bodenschaetzung(
+                gdb_path,
+                workspace,
+                keep_workdata,
+                flaechenformindex,
+                max_shred_area,
+                merge_area,
+                delete_not_merged_minis,
+            )
 
             if not success:
                 arcpy.AddError("Berechnung fehlgeschlagen!")
-                parameters[2].value = "✗ FEHLER"
+                parameters[7].value = "✗ FEHLER"
                 return
 
             arcpy.AddMessage("\n" + "=" * 70)
@@ -343,7 +427,7 @@ class calc_sfl:
             arcpy.AddMessage("=" * 70)
 
             # Output
-            parameters[2].value = "✓ Erfolgreich abgeschlossen"
+            parameters[6].value = "✓ Erfolgreich abgeschlossen"
 
         except Exception as e:
             arcpy.AddError(f"Fehler: {str(e)}")
@@ -426,8 +510,18 @@ class calc_sfl_nutzung:
         param5.value = 1
         param5.category = "Schwellenwerte Kleinstflächen"
 
-        # Parameter 5: Output Message
         param6 = arcpy.Parameter(
+            displayName="Nicht gemergte Kleinstflächen löschen?",
+            name="delete_not_merged_mini",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param6.value = True
+        param6.category = "Schwellenwerte Kleinstflächen"
+
+        # Parameter 5: Output Message
+        param7 = arcpy.Parameter(
             displayName="Ergebnis",
             name="output",
             datatype="GPString",
@@ -435,7 +529,7 @@ class calc_sfl_nutzung:
             direction="Output",
         )
 
-        return [param0, param1, param2, param3, param4, param5, param6]
+        return [param0, param1, param2, param3, param4, param5, param6, param7]
 
     def isLicensed(self):
         """Lizenzprüfung."""
@@ -467,18 +561,25 @@ class calc_sfl_nutzung:
             flaechenformindex = parameters[3].value
             max_shred_area = parameters[4].value
             merge_area = parameters[5].value
+            not_merged_mini_delete = parameters[6].value
 
             arcpy.AddMessage("\n" + "=" * 70)
             arcpy.AddMessage("Verschnitt Flurstück und tatsächliche Nutzung")
             arcpy.AddMessage("=" * 70)
 
             success = sfl.calc_sfl_nutzung.calculate_sfl_nutzung(
-                gdb_path, workspace, keep_workdata, flaechenformindex, max_shred_area, merge_area
+                gdb_path,
+                workspace,
+                keep_workdata,
+                flaechenformindex,
+                max_shred_area,
+                merge_area,
+                not_merged_mini_delete,
             )
 
             if not success:
                 arcpy.AddError("Berechnung fehlgeschlagen!")
-                parameters[6].value = "✗ FEHLER"
+                parameters[7].value = "✗ FEHLER"
                 return
 
             arcpy.AddMessage("\n" + "=" * 70)
@@ -924,6 +1025,8 @@ class wfs_download:
 
         v_al_layer = layer.replace(":", "_")  # Doppelpunkt in Dateipfad unzulässig
         layer_name = v_al_layer + "_" + str(index)
+
+        arcpy.AddMessage(f"Starte Download von {self.url}?{requests.compat.urlencode(params)}")
 
         if not response.status_code == 200:
             arcpy.AddWarning(f"Error {response.status_code}: {response.reason} beim Downloadversuch des Layers {layer}")

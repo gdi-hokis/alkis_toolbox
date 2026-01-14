@@ -3,7 +3,10 @@
 		"flurstueck": "nora_v_al_flurstueck",
 		"nutzung": "nora_v_al_tatsaechliche_nutzung",
 		"bodenschaetzung": "nora_v_al_bodenschaetzung_f",
-		"bewertung": "nora_v_al_bodenbewertung"
+		"bewertung": "nora_v_al_bodenbewertung",
+		"lagebezechnung": "nora_v_al_lagebezeichnung",
+		"gebaeude": "nora_v_al_gebaeude",
+		"strasse_gewann": "nora_v_al_strasse_gewann"
 	},
 
 	"flurstueck": {
@@ -12,6 +15,21 @@
 		"shape_area": "SHAPE@AREA",
 		"amtliche_flaeche": "amtliche_flaeche",
 		"objectid": "OBJECTID"
+	},
+
+	"lagebezeichnung": {
+		"hausnummer": "hausnummer",
+		"lage_id": "lage_id",
+		"lagebezeichnung": "lagebezeichnung",
+		"gesamtschluessel": "gesamtschluessel",
+		"lageschluessel": "lageschluessel",
+		"nummer": "nummer",
+		"zusatz": "zusatz"
+	},
+
+	"gebaeude": {
+		"gebaeudefunktion_name": "gebaeudefunktion_name",
+		"object_id": "object_id"
 	},
 
 	"nutzung": {
@@ -46,5 +64,10 @@
 		"sonstige_angaben_name": "sonstige_angaben_name",
 		"bodenzahl": "bodenzahl",
 		"ackerzahl": "ackerzahl"
+	},
+
+	"bewertung": {
+		"klassifizierung_id": "klassifizierung_id",
+		"klassifizierung_name": "klassifizierung_name"
 	}
 }
