@@ -228,9 +228,8 @@ def download_wfs(grid, layer_list, gdb, work_dir, req_settings, polygon_fc, cfg,
         arcpy.AddMessage("Z-Werte wurden entfernt")
 
         intersect(polygon_fc, output_fc)
-    # Feldberechnungen für spezifische Layer durchführen
-    fc = arcpy.ListFeatureClasses()
-    for output_fc in fc:
+
+        # Feldberechnungen für spezifische Layer durchführen
         perform_field_calculations(output_fc, gdb)
 
     return process_data, process_fc
