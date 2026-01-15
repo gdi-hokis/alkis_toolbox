@@ -932,9 +932,7 @@ class alkis_eigentuemer:
         """
         fc_gemeinden = parameters[1]
         fc_flurstuecke = parameters[2]
-        output_table = parameters[3]
         buffer_size = parameters[4]
-
 
         # Parameter 2: Feature Class Gemeinden validieren
         if fc_gemeinden.value:
@@ -955,33 +953,6 @@ class alkis_eigentuemer:
                     fc_flurstuecke.setErrorMessage(f"Die Feature Class muss ein Feld '{fld_flstkey}' enthalten.")
             except Exception as e:
                 fc_flurstuecke.setErrorMessage(f"Fehler beim Lesen der Feature Class: {str(e)}")
-
-        # Parameter 4: Output-Tabelle validieren
-        if output_table.value:
-            output_path = output_table.valueAsText
-
-            if ".gdb" not in output_path.lower():
-                output_table.setErrorMessage("Die Ausgabetabelle muss in einer File-Geodatabase (.gdb) erstellt werden.")
-            elif os.sep in output_path or "/" in output_path:
-                gdb_path = output_path.lower().split(".gdb")[0] + ".gdb"
-                table_name = os.path.basename(output_path)
-
-                if not arcpy.Exists(gdb_path):
-                    output_table.setErrorMessage(f"Die Geodatabase existiert noch nicht: {gdb_path}")
-                elif not table_name:
-                    output_table.setErrorMessage("Bitte geben Sie einen Tabellennamen an.")
-                elif "." in table_name:
-                    output_table.setErrorMessage("Der Tabellenname darf keine Dateiendung (z.B. .txt, .csv) enthalten.")
-                elif " " in table_name:
-                    output_table.setErrorMessage("Der Tabellenname darf keine Leerzeichen enthalten.")
-                elif not table_name[0].isalpha() and table_name[0] != "_":
-                    output_table.setErrorMessage("Der Tabellenname muss mit einem Buchstaben oder Unterstrich beginnen.")
-                elif not all(c.isalnum() or c == "_" for c in table_name):
-                    output_table.setErrorMessage("Der Tabellenname darf nur Buchstaben, Zahlen und Unterstriche enthalten.")
-                elif len(table_name) > 64:
-                    output_table.setErrorMessage(f"Der Tabellenname ist zu lang ({len(table_name)} Zeichen). Maximum: 64 Zeichen.")
-                elif arcpy.Exists(output_path):
-                    output_table.setWarningMessage(f"Die Tabelle '{table_name}' existiert bereits und wird überschrieben.")
 
         # Parameter 5: Buffer-Größe validieren
         if buffer_size.value is not None and buffer_size.value < 0:
