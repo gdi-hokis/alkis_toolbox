@@ -95,31 +95,6 @@ def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum, config):
     # erstellt Tabelle aus csv und speichert in gdb
     arcpy.TableToTable_conversion(prepared_csv, gdb, owner_table)
 
-    fld_flst = config["eigentuemer"]["flst"]
-
-    # Feld 'flurstueck' umformatieren zu 'flstkey' und Tabelle hinzufügen
-    arcpy.AddMessage("- Berechne FLSTKEY...")
-    arcpy.CalculateField_management(
-        in_table=owner_table,
-        field="flstkey",
-        expression=f"calcFLSTKEY(!{fld_flst}!)",
-        expression_type="PYTHON3",
-        code_block="""def calcFLSTKEY(s):
-        teile = s.split("-")
-        gemarkung = str(int(teile[0][2:]))             # "080237" → "237"
-        flur = str(int(teile[1]))            # "000" → "0"
-        zaehler, nenner = teile[2].split("/")  # z.B. "00023/0006"
-        zaehler = str(int(zaehler))
-        if nenner.strip() == "0000":
-            return f"{gemarkung}-{flur}-{zaehler}"
-        else:
-            nenner = str(int(nenner))
-            return f"{gemarkung}-{flur}-{zaehler}/{nenner}"
-        """,
-        field_type="TEXT",
-        enforce_domains="NO_ENFORCE_DOMAINS"
-    )
-
     fld_fkz = config["eigentuemer"]["fkz"]
 
     # Feld 'FSK' berechnen aus 'FKZ' und Tabelle hinzufügen
@@ -135,6 +110,8 @@ def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum, config):
             fsk = fsk[:6] + "___" + fsk[9:]
         if fsk[14:18] == "0000":
             fsk = fsk[:14] + "____" + fsk[18:]
+        if fsk[-2:] == "00":
+            fsk = fsk[:-2]
         return fsk
         """,
         field_type="TEXT",
