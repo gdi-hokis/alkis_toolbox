@@ -69,5 +69,21 @@
 	"bewertung": {
 		"klassifizierung_id": "klassifizierung_id",
 		"klassifizierung_name": "klassifizierung_name"
+	},
+
+	"wfs_config": {
+		"wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
+		"params_capabilities": {
+			"service": "WFS",
+			"request": "GetCapabilities",
+			"version": "2.0.0"
+		},
+		"params_feature": {
+			"service": "WFS",
+			"request": "GetFeature",
+			"version": "2.0.0",
+			"outputFormat": "json"
+		},
+		"identify_fields": ["gml_id", "gesamtschluessel"]
 	}
 }
