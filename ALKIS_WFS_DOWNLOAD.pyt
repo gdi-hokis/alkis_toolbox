@@ -24,18 +24,20 @@ from datetime import datetime
 import time
 import requests
 import arcpy
-import copy_alkis_eigentuemer
+import owner.copy_alkis_eigentuemer
 import importlib
-
+import config.config_loader
 
 # Konfigurationsparameter
-config = {
+wfs_config = {
     "wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
     "params_capabilities": {"service": "WFS", "request": "GetCapabilities", "version": "2.0.0"},
     "params_feature": {"service": "WFS", "request": "GetFeature", "version": "2.0.0", "outputFormat": "json"},
     "identify_fields": ["gml_id", "gesamtschluessel"],
 }
 # Gesamtschlüssel für Gewanne/Straßen nötig, da es dort identische Geometrien mit anderen Bezeichnungen gibt...
+
+cfg = config.config_loader.FieldConfigLoader.load_config()
 
 # Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
 layers_initialized = False
@@ -234,7 +236,7 @@ class wfs_download:
         self.layers = []
         self.process_data = []
         self.process_fc = []
-        self.url = config["wfs_url"]
+        self.url = wfs_config["wfs_url"]
 
     def getParameterInfo(self):
         """Define the tool parameters."""
@@ -328,8 +330,8 @@ class wfs_download:
             return
 
         # URL des WFS-Services
-        self.url = config["wfs_url"]
-        params = config["params_capabilities"]
+        self.url = wfs_config["wfs_url"]
+        params = wfs_config["params_capabilities"]
 
         # Capabilites (schon bei Toolaufruf) auslesen und zu Multivaluelist hinzufügen
         response = requests.get(self.url, params=params, timeout=timeout, verify=False)
@@ -571,7 +573,7 @@ class wfs_download:
             field_names = [field.name for field in fields]
 
             identify_fields = ["Shape"]
-            for identity_field in config["identify_fields"]:
+            for identity_field in wfs_config["identify_fields"]:
                 if identity_field in field_names:
                     identify_fields.append(identity_field)
 
@@ -641,7 +643,7 @@ class wfs_download:
         :param work_dir: lokal ausgewählter Ordner für die json-files
         :param index: iterieren der Dateinamen (bei mehr als einem Rechteck notwendig)
         """
-        params = config["params_feature"]
+        params = wfs_config["params_feature"]
         params["typename"] = layer
         params["bbox"] = bbox
 
@@ -900,7 +902,17 @@ class alkis_eigentuemer:
         param4.category = "Weitere Parameter"
         param4.value = 500
 
-        params = [param0, param1, param2, param3, param4]
+        param5 = arcpy.Parameter(
+            displayName="Verarbeitungsdaten behalten?",
+            name="process_data",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input",
+        )
+        param5.category = "Weitere Parameter"
+        param5.value = False
+
+        params = [param0, param1, param2, param3, param4, param5]
         return params
 
     def isLicensed(self):
@@ -918,7 +930,6 @@ class alkis_eigentuemer:
         Modify the messages created by internal validation for each tool
         parameter. This method is called after internal validation.
         """
-        alkis_csv = parameters[0]
         fc_gemeinden = parameters[1]
         fc_flurstuecke = parameters[2]
         output_table = parameters[3]
@@ -928,18 +939,20 @@ class alkis_eigentuemer:
         # Parameter 2: Feature Class Gemeinden validieren
         if fc_gemeinden.value:
             try:
+                fld_gemeinde = cfg["gemeinde"]["gemeinde_name"]
                 fields = [f.name.lower() for f in arcpy.ListFields(fc_gemeinden.value)]
-                if "gemeinde_name" not in fields:
-                    fc_gemeinden.setWarningMessage("Die Feature Class enthält kein Feld 'gemeinde_name'. Bitte prüfen Sie die Datenstruktur.")
+                if fld_gemeinde.lower() not in fields:
+                    fc_gemeinden.setErrorMessage(f"Die Feature Class enthält kein Feld '{fld_gemeinde}'. Bitte prüfen Sie die Datenstruktur.")
             except Exception as e:
                 fc_gemeinden.setErrorMessage(f"Fehler beim Lesen der Feature Class: {str(e)}")
 
         # Parameter 3: Feature Class Flurstücke validieren
         if fc_flurstuecke.value:
             try:
+                fld_flstkey = cfg["flurstueck"]["flstkey"]
                 fields = [f.name.lower() for f in arcpy.ListFields(fc_flurstuecke.value)]
-                if "flstkey" not in fields:
-                    fc_flurstuecke.setErrorMessage("Die Feature Class muss ein Feld 'flstkey' enthalten.")
+                if fld_flstkey.lower() not in fields:
+                    fc_flurstuecke.setErrorMessage(f"Die Feature Class muss ein Feld '{fld_flstkey}' enthalten.")
             except Exception as e:
                 fc_flurstuecke.setErrorMessage(f"Fehler beim Lesen der Feature Class: {str(e)}")
 
@@ -978,7 +991,7 @@ class alkis_eigentuemer:
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        importlib.reload(copy_alkis_eigentuemer)
+        importlib.reload(owner.copy_alkis_eigentuemer)
 
         # Get Parameters
         alkis_csv = parameters[0].valueAsText
@@ -986,41 +999,8 @@ class alkis_eigentuemer:
         fc_flurstuecke = parameters[2].value
         output_table = parameters[3].valueAsText
         buffer_size = parameters[4].value
-
-        # Pfad in GDB und Tabellenname zerlegen
-        output_gdb = os.path.dirname(output_table)
-        output_table_name = os.path.basename(output_table)
-
-        arcpy.env.workspace = output_gdb
-
-        # Schritt 1: csv bereinigen
-        arcpy.AddMessage("-"*40)
-        arcpy.AddMessage("Schritt 1 von 3 -- CSV vorbereiten ...")
-        arcpy.AddMessage("-"*40)
-        prepared_csv, abrufdatum = copy_alkis_eigentuemer.prepare_csv(alkis_csv)
-
-        # Schritt 2: Eigentümer-Tabelle erstellen
-        arcpy.AddMessage("-"*40)
-        arcpy.AddMessage("Schritt 2 von 3 -- Eigentümer-Tabelle erstellen ...")
-        arcpy.AddMessage("-"*40)
-        copy_alkis_eigentuemer.make_eigentuemer_table(
-            prepared_csv,
-            output_gdb,
-            output_table_name,
-            abrufdatum
-        )
-
-        # Schritt 3: räumliche Verknüpfung mit Flurstücken und Gemeinden
-        arcpy.AddMessage("-"*40)
-        arcpy.AddMessage("Schritt 3 von 3 -- Räumliche Verknüpfung mit Flurstücken und Gemeinden ...")
-        arcpy.AddMessage("-"*40)
-        copy_alkis_eigentuemer.spatial_join_gem_flst(
-            fc_gemeinden,
-            fc_flurstuecke,
-            output_gdb,
-            output_table_name,
-            buffer_size
-        )
+        keep_temp_data = parameters[5].value
+        owner.copy_alkis_eigentuemer.copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data)
         return
 
     def postExecute(self, parameters):
