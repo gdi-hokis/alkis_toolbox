@@ -36,22 +36,5 @@ class FieldConfigLoader:
             arcpy.AddMessage(f"Feldkonfiguration geladen: {config_path}")
             return cls._config
         except Exception as e:
-            arcpy.AddError(f"Fehler beim Laden der Feldkonfiguration: {str(e)}")
+            arcpy.AddError(f"Fehler beim Laden der Config: {str(e)}")
             raise
-
-    @classmethod
-    def get(cls, *keys):
-        """
-        Greift auf Config mit verschachtelter Notation zu.
-        Beispiel: FieldConfigLoader.get("flurstueck", "flurstueckskennzeichen")
-        """
-        if cls._config is None:
-            cls.load_config()
-
-        value = cls._config
-        for key in keys:
-            if isinstance(value, dict):
-                value = value.get(key)
-            else:
-                return None
-        return value

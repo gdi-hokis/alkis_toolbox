@@ -218,25 +218,6 @@ def calcBeschriftung(bodenart, nutzungsart, entstehung, klimastufe, wasserstufe,
         return False
 
 
-def calculate_gebaeude_object_id(gebaeude_fc):
-    """
-    Generiert eindeutige UUID für jedes Gebäude.
-
-    :param gebaeude_fc: Feature Class der Gebäude (v_al_gebaeude)
-    """
-    try:
-        code_block = """def calcUuid():
-    import uuid
-    return str(uuid.uuid4())"""
-
-        arcpy.CalculateField_management(gebaeude_fc, "object_id", "calcUuid()", "PYTHON3", code_block)
-        arcpy.AddMessage("object_id für Gebäude generiert")
-        return True
-    except Exception as e:
-        arcpy.AddError(f"Fehler bei Generierung object_id Gebäude: {str(e)}")
-        return False
-
-
 def clean_up_flur_fields(flur_fc):
     """
     Räumt temporäre Felder auf (z.B. flurnummer_l nach Join).

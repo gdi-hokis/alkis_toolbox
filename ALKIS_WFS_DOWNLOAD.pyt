@@ -42,12 +42,14 @@ importlib.reload(sfl.merge_mini_geometries)
 
 
 # Konfigurationsparameter
-config = {
+wfs_config = {
     "wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
     "params_capabilities": {"service": "WFS", "request": "GetCapabilities", "version": "2.0.0"},
     "params_feature": {"service": "WFS", "request": "GetFeature", "version": "2.0.0", "outputFormat": "json"},
     "identify_fields": ["gml_id", "gesamtschluessel"],
 }
+
+cfg = config.config_loader.FieldConfigLoader.load_config()
 # Gesamtschlüssel für Gewanne/Straßen nötig, da es dort identische Geometrien mit anderen Bezeichnungen gibt...
 
 # Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
@@ -66,7 +68,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage, calc_sfl_nutzung, calc_sfl_bodenschaetzung, compare_feature_classes]
+        self.tools = [wfs_download, calc_lage, calc_sfl_nutzung, calc_sfl_bodenschaetzung]
 
 
 class calc_lage:
@@ -139,7 +141,7 @@ class calc_lage:
         save_fc = parameters[3].value
 
         try:
-            success = lage.calc_lage.calculate_lage(work_folder, gdb_path, keep_workdata, save_fc)
+            success = lage.calc_lage.calculate_lage(cfg, work_folder, gdb_path, keep_workdata, save_fc)
 
             if not success:
                 return False
@@ -149,138 +151,9 @@ class calc_lage:
             return False
 
 
-class compare_feature_classes(object):
-    def __init__(self):
-        self.label = "Feature-Klassen vergleichen"
-        self.description = "Vergleicht zwei Feature-Klassen anhand von drei Feldern und speichert Unterschiede in einer neuen Feature-Class."
-
-    def getParameterInfo(self):
-        params = []
-
-        # Featureklasse 1
-        param0 = arcpy.Parameter(
-            displayName="Featureklasse 1",
-            name="fc1",
-            datatype="DEFeatureClass",
-            parameterType="Required",
-            direction="Input",
-        )
-        params.append(param0)
-
-        # Featureklasse 2
-        param1 = arcpy.Parameter(
-            displayName="Featureklasse 2",
-            name="fc2",
-            datatype="DEFeatureClass",
-            parameterType="Required",
-            direction="Input",
-        )
-        params.append(param1)
-
-        # Die Vergleichsfelder
-        param2 = arcpy.Parameter(
-            displayName="Felder zum Vergleichen",
-            name="compare_fields",
-            datatype="Field",
-            parameterType="Required",
-            direction="Input",
-            multiValue=True,
-        )
-        param2.parameterDependencies = [param0.name]
-        param2.filter.list = []
-        params.append(param2)
-
-        # Output-Feature-Class
-        param3 = arcpy.Parameter(
-            displayName="Output-Feature-Class",
-            name="output_fc",
-            datatype="DEFeatureClass",
-            parameterType="Required",
-            direction="Output",
-        )
-        params.append(param3)
-
-        return params
-
-    def execute(self, parameters, messages):
-        fc1 = parameters[0].valueAsText
-        fc2 = parameters[1].valueAsText
-        fields_to_compare = parameters[2].valueAsText.split(";")
-        output_fc = parameters[3].valueAsText
-
-        # Workspace bestimmen
-        workspace = os.path.dirname(output_fc)
-        output_fc_name = os.path.basename(output_fc)
-
-        # Spatial Reference von FC1 übernehmen
-        spatial_ref = arcpy.Describe(fc1).spatialReference
-
-        # Funktion: Feature-Class in Dictionary mit Geometrien umwandeln
-        def fc_to_dict(fc, fields):
-            data_dict = {}
-            with arcpy.da.SearchCursor(fc, fields + ["SHAPE@"]) as cursor:
-                for row in cursor:
-                    key = tuple(row[:-1])  # Alle Felder außer Geometrie
-                    data_dict[key] = row[-1]  # Geometrie
-            return data_dict
-
-        # Feature-Klassen in Dicts umwandeln
-        dict1 = fc_to_dict(fc1, fields_to_compare)
-        dict2 = fc_to_dict(fc2, fields_to_compare)
-
-        # Unterschiede berechnen
-        only_in_fc1 = set(dict1.keys()) - set(dict2.keys())
-        only_in_fc2 = set(dict2.keys()) - set(dict1.keys())
-
-        # Output-Feature-Class erstellen
-        arcpy.CreateFeatureclass_management(
-            workspace, output_fc_name, geometry_type=arcpy.Describe(fc1).shapeType, spatial_reference=spatial_ref
-        )
-
-        # Vergleichsfelder hinzufügen
-        for field in fields_to_compare:
-            fc1_field = arcpy.ListFields(fc1, field)[0]
-            arcpy.AddField_management(
-                output_fc, field, fc1_field.type, field_length=fc1_field.length if fc1_field.type == "String" else None
-            )
-
-        # Feld für Quelle hinzufügen
-        arcpy.AddField_management(output_fc, "Quelle", "TEXT", field_length=100)
-
-        # Daten einfügen
-        with arcpy.da.InsertCursor(output_fc, fields_to_compare + ["Quelle", "SHAPE@"]) as cursor:
-            # Einträge nur in FC1
-            for key in only_in_fc1:
-                row = list(key) + [fc1, dict1[key]]
-                cursor.insertRow(row)
-
-            # Einträge nur in FC2
-            for key in only_in_fc2:
-                row = list(key) + [fc2, dict2[key]]
-                cursor.insertRow(row)
-
-        # Ausgabe der Ergebnisse
-        arcpy.AddMessage(f"Vergleich abgeschlossen:")
-        arcpy.AddMessage(f"  FC1: {fc1}")
-        arcpy.AddMessage(f"  FC2: {fc2}")
-        arcpy.AddMessage(f"  Vergleichsfelder: {', '.join(fields_to_compare)}")
-        arcpy.AddMessage("")
-        arcpy.AddMessage(f"Nur in FC1 ({len(only_in_fc1)} Einträge)")
-        arcpy.AddMessage(f"Nur in FC2 ({len(only_in_fc2)} Einträge)")
-        arcpy.AddMessage(f"Übereinstimmungen: {len(set(dict1.keys()) & set(dict2.keys()))} Einträge")
-        arcpy.AddMessage("")
-        arcpy.AddMessage(
-            f"Unterschiede in '{output_fc_name}' gespeichert ({len(only_in_fc1) + len(only_in_fc2)} Einträge total)"
-        )
-
-
 class calc_sfl_bodenschaetzung:
-    """
-    ArcGIS Toolbox Tool für SFL- und EMZ-Berechnung (optimierte Version).
-    """
-
     def __init__(self):
-        self.label = "Verschnitt Flurstück und Bodenschätzung"
+        self.label = "Verschnitt Flurstück & Bodenschätzung"
         self.description = """
         Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) von den Flurstücken mit der Bodenschätzung und Bodenschätzungsbewertung.
         """
@@ -291,7 +164,7 @@ class calc_sfl_bodenschaetzung:
 
         # Parameter 1: GDB Path
         param0 = arcpy.Parameter(
-            displayName="Geodatabase",
+            displayName="Ziel-Geodatabase wählen",
             name="gdb_path",
             datatype="DEWorkspace",
             parameterType="Required",
@@ -301,7 +174,7 @@ class calc_sfl_bodenschaetzung:
 
         # Parameter 2: Workspace
         param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank",
+            displayName="Arbeitsdatenbank für temporäre Daten",
             name="workspace",
             datatype="DEWorkspace",
             parameterType="Required",
@@ -318,53 +191,54 @@ class calc_sfl_bodenschaetzung:
         param2.value = True
 
         param3 = arcpy.Parameter(
+            displayName="XY-Toleranz für Überschneidungen",
+            name="xy_tolerance",
+            datatype="GPLinearUnit",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.value = "0.005 Meters"
+        param3.category = "Schwellenwerte Kleinstflächen"
+
+        param4 = arcpy.Parameter(
             displayName="größter erlaubter Flächenformindex",
             name="flaechenformindex",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param3.value = 40
-        param3.category = "Schwellenwerte Kleinstflächen"
+        param4.value = 40
+        param4.category = "Schwellenwerte Kleinstflächen"
 
-        param4 = arcpy.Parameter(
+        param5 = arcpy.Parameter(
             displayName="Maximalgröße zum Merge (m²)",
             name="max_shred_area",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input",
         )
-        param4.value = 5
-        param4.category = "Schwellenwerte Kleinstflächen"
+        param5.value = 5
+        param5.category = "Schwellenwerte Kleinstflächen"
 
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Minimalgröße zum Erhalt (m²)",
             name="merge_area",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param5.value = 2
-        param5.category = "Schwellenwerte Kleinstflächen"
+        param6.value = 2
+        param6.category = "Schwellenwerte Kleinstflächen"
 
-        param6 = arcpy.Parameter(
+        param7 = arcpy.Parameter(
             displayName="Nicht gemergte Kleinstflächen löschen?",
             name="delete_not_merged_mini",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input",
         )
-        param6.value = True
-        param6.category = "Schwellenwerte Kleinstflächen"
-
-        # Parameter 5: Output Message
-        param7 = arcpy.Parameter(
-            displayName="Ergebnis",
-            name="output",
-            datatype="GPString",
-            parameterType="Derived",
-            direction="Output",
-        )
+        param7.value = True
+        param7.category = "Schwellenwerte Kleinstflächen"
 
         return [param0, param1, param2, param3, param4, param5, param6, param7]
 
@@ -379,6 +253,14 @@ class calc_sfl_bodenschaetzung:
 
     def updateMessages(self, parameters):
         """Validiere Parameter."""
+        gdb_param = parameters[0].valueAsText
+
+        if gdb_param:
+            gdb_path = os.path.join(gdb_param, "fsk_x_bodenschaetzung")
+            if arcpy.Exists(gdb_path):
+                parameters[0].setWarningMessage(
+                    "Die Feature-Class 'fsk_x_bodenschaetzung' existiert bereits in der Geodatabase und wird überschrieben."
+                )
         pass
 
     def execute(self, parameters, messages):
@@ -389,12 +271,14 @@ class calc_sfl_bodenschaetzung:
             gdb_path = parameters[0].valueAsText
             workspace = parameters[1].valueAsText
             keep_workdata = parameters[2].value
-            flaechenformindex = parameters[3].value
-            max_shred_area = parameters[4].value
-            merge_area = parameters[5].value
-            delete_not_merged_minis = parameters[6].value
+            flaechenformindex = parameters[4].value
+            max_shred_area = parameters[5].value
+            merge_area = parameters[6].value
+            delete_not_merged_minis = parameters[7].value
+            xy_tolerance = parameters[3].valueAsText
 
             success = sfl.calc_sfl_bodenschaetzung.calculate_sfl_bodenschaetzung(
+                cfg,
                 gdb_path,
                 workspace,
                 keep_workdata,
@@ -402,6 +286,7 @@ class calc_sfl_bodenschaetzung:
                 max_shred_area,
                 merge_area,
                 delete_not_merged_minis,
+                xy_tolerance,
             )
 
             if not success:
@@ -412,10 +297,6 @@ class calc_sfl_bodenschaetzung:
 
 
 class calc_sfl_nutzung:
-    """
-    ArcGIS Toolbox Tool für den Verschnitt von Flurstück und tatsächlicher Nutzung
-    """
-
     def __init__(self):
         self.label = "Verschnitt Flurstück & Nutzung"
         self.description = """
@@ -428,7 +309,7 @@ class calc_sfl_nutzung:
 
         # Parameter 1: GDB Path
         param0 = arcpy.Parameter(
-            displayName="Geodatabase",
+            displayName="Ziel-Geodatabase wählen",
             name="gdb_path",
             datatype="DEWorkspace",
             parameterType="Required",
@@ -438,7 +319,7 @@ class calc_sfl_nutzung:
 
         # Parameter 2: Workspace
         param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank",
+            displayName="Arbeitsdatenbank für temporäre Daten",
             name="workspace",
             datatype="DEWorkspace",
             parameterType="Required",
@@ -455,46 +336,56 @@ class calc_sfl_nutzung:
         param2.value = True
 
         param3 = arcpy.Parameter(
+            displayName="XY-Toleranz für Überschneidungen",
+            name="xy_tolerance",
+            datatype="GPLinearUnit",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.value = "0.001 Meters"
+        param3.category = "Schwellenwerte Kleinstflächen"
+
+        param4 = arcpy.Parameter(
             displayName="größter erlaubter Flächenformindex",
             name="flaechenformindex",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param3.value = 40
-        param3.category = "Schwellenwerte Kleinstflächen"
+        param4.value = 40
+        param4.category = "Schwellenwerte Kleinstflächen"
 
-        param4 = arcpy.Parameter(
+        param5 = arcpy.Parameter(
             displayName="Maximalgröße zum Merge (m²)",
             name="max_shred_area",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input",
         )
-        param4.value = 5
-        param4.category = "Schwellenwerte Kleinstflächen"
+        param5.value = 5
+        param5.category = "Schwellenwerte Kleinstflächen"
 
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Minimalgröße zum Erhalt (m²)",
             name="merge_area",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param5.value = 1
-        param5.category = "Schwellenwerte Kleinstflächen"
+        param6.value = 1
+        param6.category = "Schwellenwerte Kleinstflächen"
 
-        param6 = arcpy.Parameter(
+        param7 = arcpy.Parameter(
             displayName="Nicht gemergte Kleinstflächen löschen?",
             name="delete_not_merged_mini",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input",
         )
-        param6.value = True
-        param6.category = "Schwellenwerte Kleinstflächen"
+        param7.value = True
+        param7.category = "Schwellenwerte Kleinstflächen"
 
-        return [param0, param1, param2, param3, param4, param5, param6]
+        return [param0, param1, param2, param3, param4, param5, param6, param7]
 
     def isLicensed(self):
         """Lizenzprüfung."""
@@ -524,12 +415,14 @@ class calc_sfl_nutzung:
             gdb_path = parameters[0].valueAsText
             workspace = parameters[1].valueAsText
             keep_workdata = parameters[2].value
-            flaechenformindex = parameters[3].value
-            max_shred_area = parameters[4].value
-            merge_area = parameters[5].value
-            not_merged_mini_delete = parameters[6].value
+            xy_tolerance = parameters[3].valueAsText
+            flaechenformindex = parameters[4].value
+            max_shred_area = parameters[5].value
+            merge_area = parameters[6].value
+            not_merged_mini_delete = parameters[7].value
 
             success = sfl.calc_sfl_nutzung.calculate_sfl_nutzung(
+                cfg,
                 gdb_path,
                 workspace,
                 keep_workdata,
@@ -537,6 +430,7 @@ class calc_sfl_nutzung:
                 max_shred_area,
                 merge_area,
                 not_merged_mini_delete,
+                xy_tolerance,
             )
 
             if not success:
@@ -555,7 +449,7 @@ class wfs_download:
         self.layers = []
         self.process_data = []
         self.process_fc = []
-        self.url = config["wfs_url"]
+        self.url = wfs_config["wfs_url"]
 
     def getParameterInfo(self):
         """Define the tool parameters."""
@@ -649,8 +543,8 @@ class wfs_download:
             return
 
         # URL des WFS-Services
-        self.url = config["wfs_url"]
-        params = config["params_capabilities"]
+        self.url = wfs_config["wfs_url"]
+        params = wfs_config["params_capabilities"]
 
         # Capabilites (schon bei Toolaufruf) auslesen und zu Multivaluelist hinzufügen
         response = requests.get(self.url, params=params, timeout=timeout, verify=False)
@@ -892,7 +786,7 @@ class wfs_download:
             field_names = [field.name for field in fields]
 
             identify_fields = ["Shape"]
-            for identity_field in config["identify_fields"]:
+            for identity_field in wfs_config["identify_fields"]:
                 if identity_field in field_names:
                     identify_fields.append(identity_field)
 
@@ -913,8 +807,8 @@ class wfs_download:
             fc_time = time.time() - fc_start
             arcpy.AddMessage(f"2D-Konvertierung abgeschlossen in {fc_time:.2f} Sekunden")
 
-            arcpy.Delete_management(output_fc)
-            arcpy.Rename_management(output_fc_2D, output_fc)
+            arcpy.Delete_management(os.path.join(gdb, output_fc))
+            arcpy.Rename_management(os.path.join(gdb, output_fc_2D), output_fc)
 
             arcpy.AddMessage("Z-Werte wurden entfernt")
 
@@ -962,7 +856,7 @@ class wfs_download:
         :param work_dir: lokal ausgewählter Ordner für die json-files
         :param index: iterieren der Dateinamen (bei mehr als einem Rechteck notwendig)
         """
-        params = config["params_feature"]
+        params = wfs_config["params_feature"]
         params["typename"] = layer
         params["bbox"] = bbox
 

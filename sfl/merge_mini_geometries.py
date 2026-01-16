@@ -13,14 +13,6 @@ import time
 import pandas as pd
 import numpy as np
 
-try:
-    from shapely.geometry import shape
-
-    SHAPELY_AVAILABLE = True
-except ImportError:
-    SHAPELY_AVAILABLE = False
-    arcpy.AddError("Shapely nicht verfügbar - Mini-Flächen-Merge wird übersprungen")
-
 
 def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_type="nutzung"):
     # Kleinstflächen-Filterung pro FSK
@@ -50,7 +42,9 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
         df_mini_merge = df_mini[(~mask_keep) | (~mask_real_feature)].copy()
 
         arcpy.AddMessage(
-            f"- {len(df_mini_keep)} Mini-Flächen erhalten (>= {merge_area} m² und Flächenformindex <{flaechenformindex}), "
+            f"- {len(df_mini_keep)} Mini-Flächen erhalten (>= {merge_area} m² und Flächenformindex <{flaechenformindex})"
+        )
+        arcpy.AddMessage(
             f"- {len(df_mini_merge)} Mini-Flächen werden gemergt (< {merge_area} m²) oder Flächenformindex >={flaechenformindex})"
         )
 
@@ -59,7 +53,7 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
 
         # Merge zu verlustende Mini-Flächen mit angrenzenden Hauptflächen
         # Nach dem Merge: ungemergte werden zu Main hinzugefügt, gemergte werden aus df_mini entfernt
-        if len(df_mini_merge) > 0 and SHAPELY_AVAILABLE:
+        if len(df_mini_merge) > 0:
             df_main_after_merge, df_mini_to_delete, df_mini_not_merged = merge(
                 df_main, df_mini_merge, calc_type=calc_type
             )
@@ -76,7 +70,6 @@ def merge(df_main, df_mini, calc_type):
 
     start_time = time.time()
     merged_oids = set()
-    tolerance = 0.1  # 10cm Buffer für Toleranz
     total_mini = len(df_mini)
     processed_mini = 0
 
@@ -88,10 +81,10 @@ def merge(df_main, df_mini, calc_type):
         mini_fsk = mini_row["fsk"]
 
         # Progress alle 1000 Features oder am Ende
-        if processed_mini % 1000 == 0 or processed_mini == total_mini:
+        if processed_mini % 2000 == 0 or processed_mini == total_mini:
             elapsed = time.time() - start_time
             arcpy.AddMessage(
-                f"    Fortschritt: {processed_mini}/{total_mini} Mini-Flächen verarbeitet "
+                f"- Fortschritt: {processed_mini}/{total_mini} Mini-Flächen verarbeitet "
                 f"({len(merged_oids)} erfolgreich gemergt, {elapsed:.1f}s)"
             )
 
@@ -109,37 +102,8 @@ def merge(df_main, df_mini, calc_type):
             try:
                 if main_geom.touches(mini_geom) or main_geom.intersects(mini_geom):
                     best_match_idx = main_idx
+
                     break
-            except:
-                pass
-
-        # === Strategie 2: Distance check mit Toleranz ===
-        if best_match_idx is None:
-            min_distance = float("inf")
-            for main_idx in fsk_main_idx:
-                main_geom = df_main.at[main_idx, "geometry"]
-                try:
-                    distance = main_geom.distance(mini_geom)
-                    if distance < tolerance and distance < min_distance:
-                        min_distance = distance
-                        best_match_idx = main_idx
-                except:
-                    pass
-
-        # === Strategie 3: Buffer - größte angrenzende Fläche ===
-        if best_match_idx is None:
-            try:
-                mini_buffer = mini_geom.buffer(0.5)
-                max_area = 0
-                for main_idx in fsk_main_idx:
-                    main_geom = df_main.at[main_idx, "geometry"]
-                    try:
-                        if mini_buffer.intersects(main_geom):
-                            if main_geom.area > max_area:
-                                max_area = main_geom.area
-                                best_match_idx = main_idx
-                    except:
-                        pass
             except:
                 pass
 
@@ -166,20 +130,23 @@ def merge(df_main, df_mini, calc_type):
                     df_main.at[best_match_idx, "emz"] = new_emz
 
                 merged_oids.add(mini_oid)
+
             except Exception as e:
-                arcpy.AddWarning(f"    Merge für Mini {mini_oid} fehlgeschlagen: {e}")
+                arcpy.AddWarning(f"- Merge für Mini {mini_oid} fehlgeschlagen: {e}")
 
     df_mini_deleted = df_mini[df_mini["objectid"].isin(merged_oids)].copy()
     df_mini_not_merged = df_mini[~df_mini["objectid"].isin(merged_oids)].copy()
     elapsed = time.time() - start_time
+    minutes = int(elapsed // 60)
+    seconds = elapsed % 60
+
+    arcpy.AddMessage(f"- {len(merged_oids)}/{len(df_mini)} Mini-Flächen gemergt ({minutes}min {seconds:.2f}s)")
 
     # Warnung für nicht-gemergte Flächen
     if len(df_mini_not_merged) > 0:
         arcpy.AddWarning(
-            f"    WARNUNG: {len(df_mini_not_merged)} Mini-Flächen konnten nicht an angrenzendes Flurstück angeschmiegt werden."
+            f"{len(df_mini_not_merged)} Mini-Flächen konnten nicht an angrenzendes Flurstück angeschmiegt werden."
         )
-
-    arcpy.AddMessage(f"    {len(merged_oids)}/{len(df_mini)} Mini-Flächen gemergt ({elapsed:.2f}s)")
 
     # Alle Mini-Flächen zurückgeben (gemergt + nicht-gemergt) zum Löschen
     return df_main, df_mini_deleted, df_mini_not_merged

@@ -19,10 +19,9 @@
 import os
 from collections import defaultdict
 import arcpy
-from config.config_loader import FieldConfigLoader
 
 
-def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
+def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
     """
     REFAKTORIERTE VERSION - Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken
     und erstellt eine Navigation_Lage Tabelle mit geometry_source-Tracking.
@@ -46,7 +45,6 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         arcpy.env.workspace = work_gdb
         arcpy.env.overwriteOutput = True
 
-        cfg = FieldConfigLoader.load_config()
         layers = cfg.get("alkis_layers")
 
         lage_point = os.path.join(gdb_path, layers["lagebezechnung"])
@@ -54,7 +52,7 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         flurstueck = os.path.join(gdb_path, layers["flurstueck"])
         lage_polygon = os.path.join(gdb_path, layers["strasse_gewann"])
 
-        lage_fi = FieldConfigLoader.get("lagebezeichnung")
+        lage_fi = cfg.get("lagebezeichnung")
         hausnummer = lage_fi["hausnummer"]
         lage_id = lage_fi["lage_id"]
         lagebezeichnung = lage_fi["lagebezeichnung"]
@@ -62,10 +60,10 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
         lageschluessel = lage_fi["lageschluessel"]
         nummer = lage_fi["nummer"]
         zusatz = lage_fi["zusatz"]
-        gebaeude_fi = FieldConfigLoader.get("gebaeude")
+        gebaeude_fi = cfg.get("gebaeude")
         gebaeude_objectid = gebaeude_fi["object_id"]
         gebaeudefunktion_name = gebaeude_fi["gebaeudefunktion_name"]
-        flurstueck_fi = FieldConfigLoader.get("flurstueck")
+        flurstueck_fi = cfg.get("flurstueck")
         flurstueckskennzeichen = flurstueck_fi["flurstueckskennzeichen"]
 
         # ============================================================================
@@ -77,6 +75,17 @@ def calculate_lage(work_gdb, gdb_path, keep_workdata, save_fc):
 
         # Filter: nur Lagebezeichnungen mit Hausnummern kopieren
         arcpy.FeatureClassToFeatureClass_conversion(gebaeude, work_gdb, "gebaeude_work")
+
+        try:
+            code_block = """def calcUuid():
+        import uuid
+        return str(uuid.uuid4())"""
+
+            arcpy.CalculateField_management("gebaeude_work", "object_id", "calcUuid()", "PYTHON3", code_block)
+            arcpy.AddMessage("- object_id für Gebäude generiert")
+        except Exception as e:
+            arcpy.AddError(f"Fehler bei Generierung object_id Gebäude: {str(e)}")
+
         arcpy.FeatureClassToFeatureClass_conversion(
             lage_point, work_gdb, "lage_work", f"{hausnummer} <> ' ' And {hausnummer} IS NOT NULL"
         )
