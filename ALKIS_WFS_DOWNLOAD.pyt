@@ -947,7 +947,7 @@ class alkis_eigentuemer:
         # Parameter 3: Feature Class Flurstücke validieren
         if fc_flurstuecke.value:
             try:
-                fld_flstkey = cfg["flurstueck"]["flstkey"]
+                fld_flstkey = cfg["flurstueck"]["fsk"]
                 fields = [f.name.lower() for f in arcpy.ListFields(fc_flurstuecke.value)]
                 if fld_flstkey.lower() not in fields:
                     fc_flurstuecke.setErrorMessage(f"Die Feature Class muss ein Feld '{fld_flstkey}' enthalten.")

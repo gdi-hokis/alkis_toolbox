@@ -15,7 +15,7 @@
 		"shape_area": "SHAPE@AREA",
 		"amtliche_flaeche": "amtliche_flaeche",
 		"objectid": "OBJECTID",
-		"flstkey": "FLSTKEY"
+		"fsk": "fsk_ohne_ff"
 	},
 
 	"lagebezeichnung": {
@@ -74,7 +74,8 @@
 
 	"eigentuemer": {
 		"flst": "Flurstueck",
-		"fkz": "FKZ"
+		"fkz": "FKZ",
+		"fsk": "fsk"
 	},
 
 	"gemeinde": {
