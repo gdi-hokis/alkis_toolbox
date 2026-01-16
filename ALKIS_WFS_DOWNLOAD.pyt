@@ -248,55 +248,64 @@ class wfs_download:
         param1.filter.type = "ValueList"
         param2 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
-            name="existing_geodatabase",
+            name="target_geodatabase",
             datatype="DEWorkspace",
             parameterType="Required",
             direction="Input",
         )
 
         param3 = arcpy.Parameter(
+            displayName="Geodatabase für temporäre Arbeitsdaten",
+            name="workspace_database",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        param4 = arcpy.Parameter(
             displayName="Speicherordner für JSON Download",
             name="folder",
             datatype="DEFolder",
             parameterType="Required",
             direction="Input",
         )
-        param4 = arcpy.Parameter(
+
+        param5 = arcpy.Parameter(
             displayName="Verarbeitungsdaten behalten?",
             name="process_data",
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input",
         )
-        param4.value = True  # standarmäßig werden Verarbeitungsdaten behalten
+        param5.value = True  # standarmäßig werden Verarbeitungsdaten behalten
 
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Max. BoundingBox Seitenlänge",
             name="cell_size",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param5.value = 20000
-        param5.category = "Weitere Parameter"
-
-        param6 = arcpy.Parameter(
-            displayName="Timeout", name="timeout", datatype="GPLong", parameterType="Required", direction="Input"
-        )
-        param6.value = 120
+        param6.value = 20000
         param6.category = "Weitere Parameter"
 
         param7 = arcpy.Parameter(
+            displayName="Timeout", name="timeout", datatype="GPLong", parameterType="Required", direction="Input"
+        )
+        param7.value = 120
+        param7.category = "Weitere Parameter"
+
+        param8 = arcpy.Parameter(
             displayName="Zertifikat verifizieren",
             name="verify_certifikate",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input",
         )
-        param7.value = True
-        param7.category = "Weitere Parameter"
+        param8.value = True
+        param8.category = "Weitere Parameter"
 
-        params = [param0, param1, param2, param3, param4, param5, param6, param7]
+        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8]
         return params
 
     def isLicensed(self):
@@ -307,7 +316,7 @@ class wfs_download:
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
-        timeout = parameters[6].value
+        timeout = parameters[7].value
 
         # Flag, dass GetCapabilities nur bei der Initialisierung aufgerufen wird
         global layers_initialized
@@ -339,14 +348,15 @@ class wfs_download:
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter. This method is called after internal validation."""
-        workspace_param = parameters[2]
+        gdbs = [parameters[2], parameters[3]]
 
         # Prüfen ob Geodatabase ausgewählt wurde (bei Datentyp "DEWorkspace" theoretisch Auswahl eines Ordners möglich)
-        if workspace_param.value:
-            workspace_path = workspace_param.valueAsText
-            # Prüfen, ob der Pfad nicht auf ".gdb" endet
-            if not workspace_path.lower().endswith(".gdb"):
-                workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
+        for gdb in gdbs:
+            if gdb.value:
+                workspace_path = gdb.valueAsText
+                # Prüfen, ob der Pfad nicht auf ".gdb" endet
+                if not workspace_path.lower().endswith(".gdb"):
+                    gdb.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
         return
 
     def execute(self, parameters, _messages):
@@ -355,15 +365,15 @@ class wfs_download:
         # Get Parameters
         polygon_fc = parameters[0].value
         checked_layers = parameters[1].valueAsText  # semicolon separated string
-        gdb_param = parameters[2].valueAsText
-        arcpy.env.workspace = parameters[2].valueAsText
-        work_dir = parameters[3].valueAsText
-        checkbox = parameters[4].value
-        cell_size = parameters[5].value
-        timeout = parameters[6].value
-        verify = parameters[7].value
-
-        wfs.download.wfs_download(polygon_fc, checked_layers, gdb_param, work_dir, checkbox, cell_size, timeout, verify, cfg)
+        target_gdb = parameters[2].valueAsText
+        workspace_gdb = parameters[3].valueAsText
+        arcpy.env.workspace = parameters[3].valueAsText
+        work_dir = parameters[4].valueAsText
+        checkbox = parameters[5].value
+        cell_size = parameters[6].value
+        timeout = parameters[7].value
+        verify = parameters[8].value
+        wfs.download.wfs_download(polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir, checkbox, cell_size, timeout, verify, cfg)
 
         return
 

@@ -5,7 +5,7 @@ import time
 import requests
 from datetime import datetime
 
-def wfs_download(polygon_fc, checked_layers, gdb_param, work_dir, checkbox, cell_size, timeout, verify, cfg):
+def wfs_download(polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir, checkbox, cell_size, timeout, verify, cfg):
     if timeout == 0:
         timeout = None
 
@@ -16,16 +16,17 @@ def wfs_download(polygon_fc, checked_layers, gdb_param, work_dir, checkbox, cell
     if not layer_list[0].startswith("nora:"):
         arcpy.AddMessage("!!!Achtung!!! Die Layernamen im Dienst wurden geändert. Bitte beachten!")
 
-    arcpy.AddMessage(f"Workspace ausgewählt: {gdb_param}")
+    arcpy.AddMessage(f"Ziel-Geodatabase ausgewählt: {target_gdb}")
+    arcpy.AddMessage(f"Temporärer Workspace ausgewählt: {workspace_gdb}")
     arcpy.AddMessage(f"Layer ausgewählt: {layer_list}")
 
     process_fc = []
 
     # Schritt 1: Bounding Boxen erstellen
-    grid = create_grid_from_polygon(polygon_fc, gdb_param, cell_size, process_fc)
+    grid = create_grid_from_polygon(polygon_fc, workspace_gdb, cell_size, process_fc)
 
     # Schritt 2: Wfs im Bereich der Bounding Boxen downloaden
-    process_data, process_fc = download_wfs(grid, layer_list, gdb_param, work_dir, req_settings, polygon_fc, cfg, process_fc)
+    process_data, process_fc = download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc)
 
     # Schritt 3: Verarbeitungsdaten wieder entfernen
     if checkbox is False:
@@ -151,14 +152,15 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
     )
     return bboxes
 
-def download_wfs(grid, layer_list, gdb, work_dir, req_settings, polygon_fc, cfg, process_fc):
+def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc):
     """
     Führt den Download von Layern vom WFS in Form von json-Dateien im durch die Bounding Boxen begrenzten Bereich durch
     und speichert diese in Feature Klassen in der übergebenen gdb
 
     :param grid: Feature Class des Bereichs als Rechteck(e)
     :param layer_list: Liste der zu downloadenden Layer
-    :param gdb: Geodatabase in die die Bounding Box gespeichert wird
+    :param target_gdb: Geodatabase in die die Endergebnisse gespeichert werden
+    :param workspace_gdb: Arbeitsdatenbank für temporäre Daten
     :param work_dir: lokal ausgewählter Ordner für die json-files
     :param req_settings: Liste mit Einstellungen zum Request: [timeout(int), verify(boolean)]
     :param polygon_fc: Feature-Class des Eingabe-Polygons (zum Löschen von vollständig außerhalb liegenden Polygonen)
@@ -218,19 +220,23 @@ def download_wfs(grid, layer_list, gdb, work_dir, req_settings, polygon_fc, cfg,
 
         arcpy.AddMessage(f"Start: FeatureClassToFeatureClass_conversion (2D-Konvertierung)...")
         fc_start = time.time()
-        arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=gdb, out_name=output_fc_2D)
+        arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=target_gdb, out_name=output_fc_2D)
         fc_time = time.time() - fc_start
         arcpy.AddMessage(f"2D-Konvertierung abgeschlossen in {fc_time:.2f} Sekunden")
 
         arcpy.Delete_management(output_fc)
-        arcpy.Rename_management(output_fc_2D, output_fc)
+        
+        # Ab hier in target_gdb arbeiten
+        output_fc_final = os.path.join(target_gdb, output_fc_2D)
+        output_fc_target = os.path.join(target_gdb, output_fc)
+        arcpy.Rename_management(output_fc_final, output_fc_target)
 
         arcpy.AddMessage("Z-Werte wurden entfernt")
 
-        intersect(polygon_fc, output_fc)
+        intersect(polygon_fc, output_fc_target)
 
         # Feldberechnungen für spezifische Layer durchführen
-        perform_field_calculations(output_fc, gdb)
+        perform_field_calculations(output_fc, target_gdb)
 
     return process_data, process_fc
 
