@@ -7,14 +7,33 @@
 Generalisierte Mini-Flächen-Merge-Utilities für SFL-Berechnungen (Nutzung und Bodenschätzung).
 Unterstützt unterschiedliche Recalculation-Logiken via Typ-Parameter.
 """
-
-import arcpy
 import time
+import arcpy
 import pandas as pd
 import numpy as np
 
 
 def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_type="nutzung"):
+    """
+    Identifiziert und merged Kleinstflächen mit angrenzenden Hauptflächen.
+
+    Filtert Mini-Flächen basierend auf Flächengröße und Flächenformindex.
+    Behält erhaltungswürdige Mini-Flächen, merged übrige mit angrenzenden Features.
+
+    Args:
+        df: DataFrame mit allen Features (Spalten: sfl, amtliche_flaeche, geometry,
+            geom_area, fsk, objectid, verbesserung, ackerzahl für bodenschaetzung)
+        max_shred_qm: Schwellenwert für Mini-Flächen-Identifikation in m²
+        merge_area: Minimale Flächengröße für Erhaltung in m²
+        flaechenformindex: Maximaler Flächenformindex für Erhaltung (niedrig = kompakt)
+        calc_type: Berechnungstyp 'nutzung' oder 'bodenschaetzung' (berechnet EMZ bei Bodenschätzung)
+
+    Returns:
+        tuple: (df_main, df_mini, df_mini_not_merged)
+            - df_main: Alle Flächen nach Merge (Haupt- + erhaltungswürdige Mini)
+            - df_mini: Erfolgreich gemergte Mini-Flächen
+            - df_mini_not_merged: Mini-Flächen, die nicht an Features angrenzen
+    """
     # Kleinstflächen-Filterung pro FSK
     mask_mini = (df["sfl"] <= max_shred_qm) & (df["amtliche_flaeche"] > max_shred_qm)
 
@@ -22,8 +41,8 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
     df.loc[~mask_mini, "is_mini"] = False
 
     # Separate mini und non-mini Features
-    df_mini = df[df["is_mini"] == True].copy()
-    df_main = df[df["is_mini"] == False].copy()
+    df_mini = df[df["is_mini"] is True].copy()
+    df_main = df[df["is_mini"] is False].copy()
 
     arcpy.AddMessage(f"- Identifiziert {len(df_mini)} Kleinstflächen zur Verarbeitung")
 
@@ -54,7 +73,7 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
         # Merge zu verlustende Mini-Flächen mit angrenzenden Hauptflächen
         # Nach dem Merge: ungemergte werden zu Main hinzugefügt, gemergte werden aus df_mini entfernt
         if len(df_mini_merge) > 0:
-            df_main_after_merge, df_mini_to_delete, df_mini_not_merged = merge(
+            df_main_after_merge, df_mini_to_delete, df_mini_not_merged = process_merging(
                 df_main, df_mini_merge, calc_type=calc_type
             )
             df_main = df_main_after_merge
@@ -66,7 +85,21 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
     return df_main, df_mini, df_mini_not_merged
 
 
-def merge(df_main, df_mini, calc_type):
+def process_merging(df_main, df_mini, calc_type):
+    """
+    Merged Mini-Flächen mit angrenzenden Hauptflächen basierend auf Geometrie-Kontakt.
+
+    Args:
+        df_main: DataFrame mit Hauptflächen
+        df_mini: DataFrame mit Mini-Flächen zum Mergen
+        calc_type: Berechnungstyp ('nutzung' oder 'bodenschaetzung') - bei Bodenschätzung wird EMZ kalkuliert
+
+    Returns:
+        tuple: (df_main_after_merge, df_mini_deleted, df_mini_not_merged)
+            - df_main_after_merge: Hauptflächen nach Merge-Operation
+            - df_mini_deleted: Erfolgreich gemergte Mini-Flächen
+            - df_mini_not_merged: Mini-Flächen, die nicht gemergt werden konnten
+    """
 
     start_time = time.time()
     merged_oids = set()
@@ -81,7 +114,7 @@ def merge(df_main, df_mini, calc_type):
         mini_fsk = mini_row["fsk"]
 
         # Progress alle 1000 Features oder am Ende
-        if processed_mini % 2000 == 0 or processed_mini == total_mini:
+        if not processed_mini % 2000 or processed_mini == total_mini:
             elapsed = time.time() - start_time
             arcpy.AddMessage(
                 f"- Fortschritt: {processed_mini}/{total_mini} Mini-Flächen verarbeitet "

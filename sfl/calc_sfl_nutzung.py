@@ -6,10 +6,9 @@
 """
 Optimierte SFL- und EMZ-Berechnung mit Pandas-Vectorisierung und Spatial-Index Geometry-Caching.
 """
-
-import arcpy
 import os
 import time
+import arcpy
 import pandas as pd
 from sfl.init_dataframes import (
     load_nutzung_to_dataframe,
@@ -17,18 +16,11 @@ from sfl.init_dataframes import (
 )
 from sfl.merge_mini_geometries import merge_mini_geometries
 
-try:
-    import shapely
-
-    SHAPELY_AVAILABLE = True
-except ImportError:
-    SHAPELY_AVAILABLE = False
-    arcpy.AddError(
-        "Shapely nicht verfügbar - Bitte klonen Sie Ihre Python-Umgebung und installieren Sie das shapely-Modul"
-    )
-
 
 def prepare_nutzung(cfg, gdb_path, workspace, xy_tolerance):
+    """
+    Vorbereitung der Nutzungs-Daten: Überschneidung mit Flurstück und Dissolve.
+    """
 
     arcpy.env.workspace = None
     arcpy.env.overwriteOutput = True
@@ -176,13 +168,13 @@ def _apply_delta_correction_nutzung(df, max_shred_qm):
         processed_groups += 1
 
         # Progress alle 50k Gruppen (oder am Ende)
-        if processed_groups % 50000 == 0 or processed_groups == total_groups:
+        if not processed_groups % 50000 or processed_groups == total_groups:
             elapsed = time.time() - start_time
             arcpy.AddMessage(f"- Fortschritt: {processed_groups}/{total_groups} FSKs verarbeitet " f"({elapsed:.1f}s)")
 
         afl = fsk_data["amtliche_flaeche"].iloc[0]
 
-        non_overlap_mask = fsk_data["is_overlap"] == False
+        non_overlap_mask = fsk_data["is_overlap"] is False
         fsk_data_main = fsk_data[non_overlap_mask]
         sfl_sum = fsk_data_main["sfl"].sum()
 
@@ -237,7 +229,7 @@ def _apply_delta_correction_nutzung(df, max_shred_qm):
         # Anwenden (Vorzeichen beachten)
         sign = 1 if delta >= 0 else -1
         for idx, share in shares.items():
-            if share == 0:
+            if not share:
                 continue
             old_sfl = df.at[idx, "sfl"]
             new_sfl = old_sfl + (sign * share)

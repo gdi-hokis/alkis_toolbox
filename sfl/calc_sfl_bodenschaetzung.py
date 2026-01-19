@@ -2,11 +2,14 @@
 
 # Copyright (c) 2024, Jana Muetsch, Andre Voelkner, LRA Hohenlohekreis
 # All rights reserved.
+"""
+Optimierte SFL- und EMZ-Berechnung mit Pandas-Vectorisierung und Spatial-Index Geometry-Caching.
+"""
 
-import arcpy
 import os
 import math
 import time
+import arcpy
 import pandas as pd
 from sfl.init_dataframes import (
     load_nutzung_to_dataframe,
@@ -15,18 +18,21 @@ from sfl.init_dataframes import (
 )
 from sfl.merge_mini_geometries import merge_mini_geometries
 
-try:
-    import shapely
-
-    SHAPELY_AVAILABLE = True
-except ImportError:
-    SHAPELY_AVAILABLE = False
-    arcpy.AddError(
-        "Shapely nicht verfügbar - Bitte klonen Sie Ihre Python-Umgebung und installieren Sie das shapely-Modul"
-    )
-
 
 def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
+    """
+    Bereitet Bodenschätzungs-Daten vor durch Intersect und Dissolve mit Flurstücken.
+
+    Args:
+        cfg: Konfigurationsdictionary mit Layer-Definitionen
+        gdb_path: Pfad zur Geodatabase
+        workspace: ArcGIS Workspace-Pfad
+        xy_tolerance: XY-Toleranz für geometrische Operationen
+        nutzung_dissolve: Dissolve-Pfad der vorbereiteten Nutzungsdaten
+
+    Returns:
+        bool: True bei Erfolg, False bei Fehler
+    """
     arcpy.AddMessage("-" * 40)
     arcpy.AddMessage("Schritt 1 von 8 -- Vorbereitung der Bodenschätzungs-Daten...")
     arcpy.AddMessage("-" * 40)
@@ -220,6 +226,19 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
 def vectorized_calculate_sfl_boden(
     cfg, gdb_path, workspace, max_shred_qm, merge_area, flaechenformindex, delete_unmerged_mini, nutzung_dissolve
 ):
+    """
+    Führt die SFL- und EMZ-Berechnung für Bodenschätzung durch mit Pandas-Vectorisierung.
+
+    Args:
+        cfg: Konfigurationsdictionary mit Layer-Definitionen
+        gdb_path: Pfad zur Geodatabase
+        workspace: ArcGIS Workspace-Pfad
+        max_shred_qm: Schwellenwert für Mini-Flächen-Identifikation in m²
+        merge_area: Minimale Flächengröße für Erhaltung in m²
+        flaechenformindex: Maximaler Flächenformindex für Erhaltung (niedrig = kompakt)
+        delete_unmerged_mini: Bool, ob nicht gemergte Mini-Flächen gelöscht werden sollen
+        nutzung_dissolve: Dissolve-Pfad der vorbereiteten Nutzungsdaten
+    """
 
     try:
         arcpy.AddMessage("-" * 40)
@@ -331,7 +350,7 @@ def _apply_delta_correction_boden(df, max_shred_qm):
         processed_groups += 1
 
         # Progress alle 50k Gruppen (oder am Ende)
-        if processed_groups % 50000 == 0 or processed_groups == total_groups:
+        if not processed_groups % 50000 or processed_groups == total_groups:
             elapsed = time.time() - start_time
             arcpy.AddMessage(f"- Fortschritt: {processed_groups}/{total_groups} FSKs ({elapsed:.1f}s)")
 
@@ -480,6 +499,27 @@ def calculate_sfl_bodenschaetzung(
     delete_unmerged_mini,
     xy_tolerance,
 ):
+    """
+    Hauptfunktion: Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) für Bodenschätzung.
+
+    Orchestriert alle Schritte: Vorbereitung, Berechnung, Mini-Flächen-Merge und Finalisierung.
+
+    Args:
+        cfg: Konfigurationsdictionary
+        gdb_path: Pfad zur Geodatabase
+        workspace: ArcGIS Workspace-Pfad
+        keep_workdata: Bool, ob Zwischenergebnisse behalten werden sollen
+        flaechenformindex: Flächenformindex-Schwellenwert
+        max_shred_qm: Schwellenwert für Mini-Flächen in m²
+        merge_area: Minimale Fläche für Erhaltung in m²
+        delete_unmerged_mini: Bool, ob nicht gemergte Mini-Flächen gelöscht werden sollen
+        xy_tolerance: XY-Toleranz für geometrische Operationen
+
+
+
+    Returns:
+        bool: True bei Erfolg, False bei Fehler
+    """
 
     arcpy.env.workspace = workspace
     arcpy.env.overwriteOutput = True

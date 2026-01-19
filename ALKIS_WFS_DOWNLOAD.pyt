@@ -23,8 +23,8 @@ import json
 from datetime import datetime
 import time
 import requests
-import arcpy
 import importlib
+import arcpy
 import wfs_field_calculations
 import lage.calc_lage
 import sfl.calc_sfl_nutzung
@@ -405,7 +405,6 @@ class calc_sfl_nutzung:
                 parameters[0].setWarningMessage(
                     "Die Feature-Class 'fsk_x_nutzung' existiert bereits in der Geodatabase und wird überschrieben."
                 )
-        pass
 
     def execute(self, parameters, messages):
         """Hauptlogik des Tools."""
@@ -801,7 +800,7 @@ class wfs_download:
             arcpy.env.outputZFlag = "Disabled"
             arcpy.env.outputMFlag = "Disabled"
 
-            arcpy.AddMessage(f"Start: FeatureClassToFeatureClass_conversion (2D-Konvertierung)...")
+            arcpy.AddMessage("Start: FeatureClassToFeatureClass_conversion (2D-Konvertierung)...")
             fc_start = time.time()
             arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=gdb, out_name=output_fc_2D)
             fc_time = time.time() - fc_start

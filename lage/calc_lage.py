@@ -16,6 +16,9 @@
 # GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
+"""
+Lagebezeichnungs-Berechnung - Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken"""
+
 import os
 from collections import defaultdict
 import arcpy
@@ -159,7 +162,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         arcpy.AddMessage(f"- {buffered_count} gepufferte Gewann-Geometrien erstellt (-0.1 Meters)")
 
         # Spatial Join mit gepufferten Gewannen
-        arcpy.AddMessage(f"- Spatial Join Flurstücke ← gepufferte Gewanne...")
+        arcpy.AddMessage("- Spatial Join Flurstücke ← gepufferte Gewanne...")
         arcpy.SpatialJoin_analysis(
             flurstueck,
             "lage_polygon_buffered",
@@ -428,13 +431,13 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
 
                 # REGEL 2: Verwerfe Einträge ohne Hausnummer, wenn gleiche mit Hausnummer existiert
                 hausnum = entry["hausnummer"]
-                if not hausnum or (isinstance(hausnum, str) and hausnum.strip() == ""):
+                if not hausnum or (isinstance(hausnum, str) and not hausnum.strip()):
                     # Prüfe, ob eine Version mit Hausnummer existiert
                     has_with_number = any(
                         e["lage_bez"] == entry["lage_bez"]
                         and e["ges_schluessel"] == entry["gesamtschluessel"]
                         and e["hausnummer"]
-                        and (isinstance(e["hausnummer"], str) and e["hausnummer"].strip() != "")
+                        and (isinstance(e["hausnummer"], str) and e["hausnummer"].strip())
                         for e in entries
                     )
                     if has_with_number:
@@ -545,7 +548,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
 
         # Lösche alle Felder außer den gewünschten (aus navigation_lage_deduplicated)
         arcpy.env.workspace = work_gdb
-        arcpy.AddMessage(f"- Lösche unnötige Felder...")
+        arcpy.AddMessage("- Lösche unnötige Felder...")
 
         all_fields = arcpy.ListFields("navigation_lage_deduplicated")
         fields_to_delete = [
@@ -565,7 +568,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         geo_exists = arcpy.Exists(nav_lage_geo_path)
         table_exists = arcpy.Exists(nav_lage_path)
 
-        arcpy.AddMessage(f"- Starte Anhängen oder Erstellen...")
+        arcpy.AddMessage("- Starte Anhängen oder Erstellen...")
 
         if save_fc and not geo_exists:
             arcpy.CopyFeatures_management(nav_lage_deduplicated, nav_lage_geo_path)

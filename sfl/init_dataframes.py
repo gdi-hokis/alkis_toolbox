@@ -2,9 +2,8 @@
 """
 DataFrames Loader Mixin - Lädt Flurstücke, Nutzung und Bodenschätzung in Pandas DataFrames.
 """
-
-import arcpy
 import os
+import arcpy
 import pandas as pd
 
 
