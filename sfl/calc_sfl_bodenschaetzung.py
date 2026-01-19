@@ -108,7 +108,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
         arcpy.MakeFeatureLayer_management(
             nutzung_dissolve,
             "nutzung_lyr",
-            where_clause=f"NOT (({nutz['objektart']} IN (43001, 43004, 43006, 43007)) OR ({nutz['objektart']} = 41006 AND {nutz['unterart_name']} IN ('Gebäude- und Freifläche Land- und Forstwirtschaft', 'Landwirtschaftliche Betriebsfläche', 'Forstwirtschaftliche Betriebsfläche')) OR ({nutz['objektart']} = 41008 AND {nutz['unterart_name']} IN ('Garten')))",
+            where_clause=f"NOT (({nutz['objektart']} IN (43001, 43004, 43005, 43006, 43007)) OR ({nutz['objektart']} = 41008 AND {nutz['unterart_name']} IN ('Garten')))",
         )
 
         arcpy.Erase_analysis("bodenschaetzung_dissolve", "nutzung_lyr", "schaetzung_relevante_nutz", xy_tolerance)

@@ -94,7 +94,7 @@ Bei den Bewertungen wird die gerundete Fläche aus Objektfläche\* Verbesserungs
 
 **Hinweis:**
 
-Relevante Nutzungsarten für Bodenschätzung: Landwirtschaft (43001), Heide (43004), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
+Relevante Nutzungsarten für Bodenschätzung: Landwirtschaft (43001), Heide (43004), Moor (43005), Sumpf (43006), Unland (43007), Garten (41008 - 4460)
 
 relevante Nutzungsarten für Bewertung: Landwirtschaft (43001), Wald (43002), Gehölz (43003), Heide (43004), Moor (43005), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
 
