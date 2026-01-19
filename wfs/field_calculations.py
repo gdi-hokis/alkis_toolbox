@@ -22,7 +22,65 @@ Modul für Feldberechnungen auf WFS-Download Daten.
 Enthält Funktionen für Berechnungen auf v_al_flurstueck, v_al_bodenschaetzung_f und v_al_gebaeude.
 """
 
+import os
 import arcpy
+
+def alkis_calc(input_layer, gdb):
+    """
+    Führt spezifische Feldberechnungen für die heruntergeladenen Layer durch.
+    Behandelt:
+    - v_al_flurstueck: Flurnummer-ID, FSK, FLSTKEY, locator_place
+    - v_al_bodenschaetzung_f: Label-Beschriftung
+    - v_al_gebaeude: object_id UUID
+
+    :param input_layer: Input Layer/Feature Class/Shapefile (arcpy Layer-Objekt)
+    :param gdb: Geodatabase-Pfad
+    """
+    try:
+        # Extrahiere den Feature Class Namen aus dem Layer-Objekt
+        desc = arcpy.Describe(input_layer)
+        output_fc = desc.baseName  # Liefert nur den Namen ohne Pfad und Erweiterung
+        
+        # Ziel-Feature-Class Pfad
+        output_fc_path = os.path.join(gdb, output_fc)
+        
+        # Prüfen ob Feature Class bereits in der Ziel-GDB existiert
+        if arcpy.Exists(output_fc_path):
+            arcpy.AddMessage(f"- Feature Class '{output_fc}' existiert bereits in der Geodatabase")
+        else:
+            arcpy.AddMessage(f"- Kopiere '{output_fc}' in die Geodatabase...")
+            arcpy.management.CopyFeatures(input_layer, output_fc_path)
+
+        # Flurstücke - Feldberechnungen
+        if output_fc == "nora_v_al_flurstueck":
+            arcpy.AddMessage("- Starte Feldberechnungen für Flurstücke...")
+
+            # Flurnummer-Berechnung benötigt auch v_al_flur
+            if arcpy.Exists(os.path.join(gdb, "nora_v_al_flur")):
+                flur_fc_path = os.path.join(gdb, "nora_v_al_flur")
+                calculate_flurnummer_l(flur_fc_path, output_fc_path)
+                join_flurnamen(output_fc_path, flur_fc_path)
+                calculate_locator_place(output_fc_path)
+                clean_up_flur_fields(flur_fc_path)
+
+            # FSK and FLSTKEY
+            calculate_fsk(output_fc_path)
+            calculate_flstkey(output_fc_path)
+
+        # Bodenschätzung - Label-Berechnung
+        elif output_fc == "nora_v_al_bodenschaetzung_f":
+            arcpy.AddMessage("- Starte Feldberechnungen für Bodenschätzung...")
+            calculate_label_bodensch(output_fc_path)
+
+        # Gebäude - object_id Generierung
+        elif output_fc == "nora_v_al_gebaeude":
+            arcpy.AddMessage("- Starte Feldberechnungen für Gebäude...")
+            calculate_gebaeude_object_id(output_fc_path)
+        else:
+            arcpy.AddMessage(f"- Keine spezifischen Feldberechnungen für {output_fc} definiert.")
+
+    except Exception as e:
+        arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")
 
 
 def calculate_flurnummer_l(flur_fc, flurstueck_fc):
@@ -112,6 +170,8 @@ def calculate_fsk(flurstueck_fc):
           fsk = fsk[:6] + "___" + fsk[9:]
       if fsk[14:18] == "0000":
           fsk = fsk[:14] + "____" + fsk[18:]
+      if fsk[-2:] == "00":
+          fsk = fsk[:-2]
       return fsk""",
             "TEXT",
         )

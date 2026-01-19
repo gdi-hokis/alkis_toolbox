@@ -248,9 +248,6 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
 
         arcpy.AddMessage("- vollständig außerhalb des Eingabepolygons liegende Geometrien entfernen...")
         intersect(polygon_fc, output_fc_target)
-
-        # Feldberechnungen für spezifische Layer durchführen
-        perform_field_calculations(output_fc, target_gdb)
         i += 1
     return process_data, process_fc
 
@@ -353,7 +350,7 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
     return layer_files, process_data, process_fc
 
 def shorten_string_fields(output_fc, fields):
-    arcpy.AddMessage("- String-Feldlängen kürzen")
+    arcpy.AddMessage("- String-Feldlängen kürzen...")
     # Liste für die Feldzuordnung
     field_mappings = []
 
@@ -400,51 +397,6 @@ def shorten_string_fields(output_fc, fields):
         # Dann umbenennen (leider muss das einzeln, aber schneller weil FC kleiner):
         for field, field_temp in field_mappings:
             arcpy.AlterField_management(output_fc, field_temp, new_field_name=field)
-
-def perform_field_calculations(output_fc, gdb):
-    """
-    Führt spezifische Feldberechnungen für die heruntergeladenen Layer durch.
-    Behandelt:
-    - v_al_flurstueck: Flurnummer-ID, FSK, FLSTKEY, locator_place
-    - v_al_bodenschaetzung_f: Label-Beschriftung
-    - v_al_gebaeude: object_id UUID
-
-    :param output_fc: Name der Feature Class
-    :param gdb: Geodatabase-Pfad
-    """
-    try:
-        import wfs.field_calculations
-
-        output_fc_path = os.path.join(gdb, output_fc)
-
-        # Flurstücke - Feldberechnungen
-        if output_fc == "nora_v_al_flurstueck":
-            arcpy.AddMessage("- Starte Feldberechnungen für Flurstücke...")
-
-            # Flurnummer-Berechnung benötigt auch v_al_flur
-            if arcpy.Exists(os.path.join(gdb, "nora_v_al_flur")):
-                flur_fc_path = os.path.join(gdb, "nora_v_al_flur")
-                wfs.field_calculations.calculate_flurnummer_l(flur_fc_path, output_fc_path)
-                wfs.field_calculations.join_flurnamen(output_fc_path, flur_fc_path)
-                wfs.field_calculations.calculate_locator_place(output_fc_path)
-                wfs.field_calculations.clean_up_flur_fields(flur_fc_path)
-
-            # FSK und FLSTKEY
-            wfs.field_calculations.calculate_fsk(output_fc_path)
-            wfs.field_calculations.calculate_flstkey(output_fc_path)
-
-        # Bodenschätzung - Label-Berechnung
-        elif output_fc == "nora_v_al_bodenschaetzung_f":
-            arcpy.AddMessage("- Starte Feldberechnungen für Bodenschätzung...")
-            wfs.field_calculations.calculate_label_bodensch(output_fc_path)
-
-        # Gebäude - object_id Generierung
-        elif output_fc == "nora_v_al_gebaeude":
-            arcpy.AddMessage("- Starte Feldberechnungen für Gebäude...")
-            wfs.field_calculations.calculate_gebaeude_object_id(output_fc_path)
-
-    except Exception as e:
-        arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")
 
 def intersect(polygon_fc, output_fc):
     """
