@@ -11,11 +11,11 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 
 ## Tools
 
-### WFS Download
+### <u>WFS Download</u>
 
 Dieses Tool lädt ALKIS-Daten des ALKIS-WFS des LGL BWs in einem definierten Bereich (Polygonlayer) als GeoJSON herunter und konvertiert diese in zweidimensionale Featureklassen in einer FGDB.
 
-### Verschnitt Flurstück & Lagebezeichnung
+### <u>Verschnitt Flurstück & Lagebezeichnung</u>
 
 Dieses Werkzeug ordnet Lagebezeichnungen (Hausnummern, Straßen, Gewanne) räumlich den Flurstücken zu und erstellt eine Verknüpfungstabelle (fsk_x_lage).
 
@@ -39,7 +39,7 @@ Schema aus dem WFS des LGLs
 **Hinweis:**
 Das Tool verwendet eigene räumliche Algorithmen, da einige Lagebezeichnungspunkte neben Gebäuden platziert sind. Dies kann zu einzelnen Abweichungen von der offiziellen Zuordnung in den NAS-Daten führen.
 
-### Verschnitt Flurstück & Nutzung
+### <u>Verschnitt Flurstück & Nutzung</u>
 
 Berechnet Schnittflächen (SFL) von den Flurstücken mit der tatsächlichen Nutzung und erstellt eine Verschnitt-Feature-Klasse fsk_x_nutzung.
 
@@ -61,7 +61,7 @@ Hierfür wird empfohlen die Python-Umgebung zu klonen und über den Paketmanager
 **Hinweis:**
 Die Ergebnisse wurden mit denen des LGLs verglichen und man kommt auf eine 99,5%-ige Übereinstimmung in den Stichproben. Die Unterschiede betragen +/- 1m² und lassen sich auf Rundungsungenauigkeiten zurückführen. Trotzdem kann es zu Unterschieden kommen, da der Algorithmus des LGLs nicht bekannt ist und somit Berechnungsunterschiede vorhanden sein werden.
 
-### Verschnitt Flurstück & Bodenschätzung
+### <u>Verschnitt Flurstück & Bodenschätzung</u>
 
 Berechnet Schnittflächen (SFL) von den Flurstücken mit der Bodenschätzung und Bodenbewertung. Berechnet die EMZ der Bodenschätzungsflächen. Endergebnis ist eine Verschnitt-Feature-Klasse fsk_x_bodenschaetzung, in der sowohl Bodenschätzung als auch Bewertungsflächen enthalten sind (sonstige_angaben_id = 9999).
 
@@ -79,18 +79,19 @@ Weitere Voraussetzung ist die Installation des shapely-Moduls in der Python-Umge
 
 1. Verschnitt Flurstücke und Bodenschätzung - Dabei werden alle Nutzungsarten abgezogen, die keine Bodenschätzung haben, sowie alle Bewertungsflächen, die nicht zusätzliche Bodenschätzungsergebnisse vorweisen können
 
-Relevante Nutzungsarten für Bodenschätzung: Landwirtschaft (43001), Heide (43004), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
-
-Bewertungen ohne Bodenschätzung - siehe VWVLK Anlage 1 (3100, 3105, 3200, 3411, 3480, 3481, 3482, 3490, 3510, 3520, 3530, 3600, 3610, 3611, 3612, 3613, 3614, 3615, 3616, 3710, 3999)
-
 2. Verschnitt Flurstücke und Bewertungsflächen - Ebenfalls Abzug aller irrelevanten Nutzungsarten
-
-relevante Nutzungsarten für Bewertung: Landwirtschaft (43001), Wald (43002), Gehölz (43003), Heide (43004), Moor (43005), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
-
-Für Fließgewässer (44001), Stehendes Gewässer (44006) findet eine Überprüfung für die Bewertungsarten 3480, 3481, 3482 und 3490 statt.
 
 3. Filterung der Miniflächen und Verschmelzung dieser mit Nachbarflurstücken
 
 4. Berechnung der Schnittflächen und Ertragsmesszahlen und Deltakorrektur zur berechneten Fläche aller relevanten Nutzungen auf dem Flurstück - Diese Deltakorrektur der Berechnung findet nur für die Bodenschätzungsflächen statt.
 
 Bei den Bewertungen wird die gerundete Fläche aus Objektfläche\* Verbesserungsfaktor Flurstück berechnet. Der Verbesserungsfaktor Flurstück ergibt sich aus amtliche Fläche/geometrische Fläche des Flurstücks. EMZ ist 0.
+
+**Hinweis:**
+Relevante Nutzungsarten für Bodenschätzung: Landwirtschaft (43001), Heide (43004), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
+
+relevante Nutzungsarten für Bewertung: Landwirtschaft (43001), Wald (43002), Gehölz (43003), Heide (43004), Moor (43005), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
+
+Für Fließgewässer (44001), Stehendes Gewässer (44006) findet eine Überprüfung für die Bewertungsarten 3480, 3481, 3482 und 3490 statt.
+
+Bewertungen ohne Bodenschätzung - siehe VWVLK Anlage 1 (3100, 3105, 3200, 3411, 3480, 3481, 3482, 3490, 3510, 3520, 3530, 3600, 3610, 3611, 3612, 3613, 3614, 3615, 3616, 3710, 3999)
