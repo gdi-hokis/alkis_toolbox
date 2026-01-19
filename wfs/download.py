@@ -21,15 +21,25 @@ def wfs_download(polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir
     arcpy.AddMessage(f"Layer ausgewählt: {layer_list}")
 
     process_fc = []
+    i = 2 if checkbox else 3
 
     # Schritt 1: Bounding Boxen erstellen
+    arcpy.AddMessage("-"*40)
+    arcpy.AddMessage(f"Schritt 1 von {i} -- Download-Grids erstellen ...")
+    arcpy.AddMessage("-"*40)
     grid = create_grid_from_polygon(polygon_fc, workspace_gdb, cell_size, process_fc)
 
     # Schritt 2: Wfs im Bereich der Bounding Boxen downloaden
+    arcpy.AddMessage("-"*40)
+    arcpy.AddMessage(f"Schritt 2 von {i} -- WFS-Daten herunterladen ...")
+    arcpy.AddMessage("-"*40)
     process_data, process_fc = download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc)
 
     # Schritt 3: Verarbeitungsdaten wieder entfernen
     if checkbox is False:
+        arcpy.AddMessage("-"*40)
+        arcpy.AddMessage(f"Schritt 3 von {i} -- Verarbeitungsdaten entfernen ...")
+        arcpy.AddMessage("-"*40)
         # Verarbeitungsdaten aus geodatabase entfernen
         for fc in process_fc:
             if arcpy.Exists(fc):
@@ -62,6 +72,7 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
     spatial_ref = arcpy.Describe(polygon_fc).spatialReference
 
     # Output-Feature-Class in definierter gdb neu anlegen
+    arcpy.AddMessage("- Bounding Box Feature Class wird erstellt...")
     fc_name = arcpy.Describe(polygon_fc).name
     if "." in fc_name:
         fc_name = fc_name.split(".")[0]
@@ -92,6 +103,8 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
     # Liste zur Speicherung der Extents-Strings
     bboxes = []
 
+    arcpy.AddMessage(f"- Erstelle Grid mit Zellen der Kantenlänge {cell_size}m...")
+
     # Fall 1: Beide Kantenlängen kleiner als cell_size → gesamter Extent
     if edge_x < cell_size and edge_y < cell_size:
         num_x = 1
@@ -113,6 +126,8 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
             num_y = int(edge_y // cell_size)
             if edge_y % cell_size > 0:
                 num_y += 1
+
+    arcpy.AddMessage(f"- Grid mit {num_x * num_y} Zellen wird erstellt...")
 
     # Grid-Zellen erzeugen und Extents als String speichern
     with arcpy.da.InsertCursor(bbox_fc, ["SHAPE@"]) as insert_cursor:
@@ -147,9 +162,6 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
                     # Extents-String für das aktuelle Rechteck
                     bboxes.append(f"{x1},{y1},{x2},{y2}")
 
-    arcpy.AddMessage(
-        f"Grid mit {num_x * num_y} Zellen (max. Kantenlänge {cell_size}m) erstellt und in {bbox_name} gespeichert."
-    )
     return bboxes
 
 def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc):
@@ -171,13 +183,16 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
     # Bounding Boxen
     arcpy.env.overwriteOutput = True
 
+    list_lenght = len(layer_list)
+    i = 1
+
     # Layer downloaden
     for layer in layer_list:
-
+        arcpy.AddMessage(f"Layer {i}/{list_lenght}: {layer}...")
         wildcards = []
 
         for index, bbox in enumerate(grid):
-            layer_files, process_data, process_fc = downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, process_fc)
+            layer_files, process_data, process_fc = downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, process_fc, workspace_gdb)
 
             if layer_files:
                 # für Filtern der Merge Feature Klassen und Benennung
@@ -187,6 +202,7 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
                         wildcards.append(wildcard)
 
         # Merge pro Geometrietyp durchführen
+        arcpy.env.workspace = workspace_gdb
         for wildcard in wildcards:
             fc = arcpy.ListFeatureClasses(wildcard)
             # Extrahiere den Ausgabename ohne Geometrietyp bei gleichen Typen
@@ -196,7 +212,8 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
             if len(wildcards) > 1:
                 output_fc = wildcard[1:-2]
 
-            arcpy.Merge_management(fc, output_fc)
+            output_fc_path = os.path.join(workspace_gdb, output_fc)
+            arcpy.Merge_management(fc, output_fc_path)
 
         # Alle Felder auflisten
         fields = arcpy.ListFields(output_fc)
@@ -218,26 +235,23 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
         arcpy.env.outputZFlag = "Disabled"
         arcpy.env.outputMFlag = "Disabled"
 
-        arcpy.AddMessage(f"Start: FeatureClassToFeatureClass_conversion (2D-Konvertierung)...")
-        fc_start = time.time()
+        arcpy.AddMessage("- 2D-Konvertierung...")
         arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=target_gdb, out_name=output_fc_2D)
-        fc_time = time.time() - fc_start
-        arcpy.AddMessage(f"2D-Konvertierung abgeschlossen in {fc_time:.2f} Sekunden")
 
         arcpy.Delete_management(output_fc)
         
         # Ab hier in target_gdb arbeiten
+        arcpy.AddMessage("- Z-Werte entfernen...")
         output_fc_final = os.path.join(target_gdb, output_fc_2D)
         output_fc_target = os.path.join(target_gdb, output_fc)
         arcpy.Rename_management(output_fc_final, output_fc_target)
 
-        arcpy.AddMessage("Z-Werte wurden entfernt")
-
+        arcpy.AddMessage("- vollständig außerhalb des Eingabepolygons liegende Geometrien entfernen...")
         intersect(polygon_fc, output_fc_target)
 
         # Feldberechnungen für spezifische Layer durchführen
         perform_field_calculations(output_fc, target_gdb)
-
+        i += 1
     return process_data, process_fc
 
 def getDifferentGeometryTypes(json_file):
@@ -269,7 +283,7 @@ def saveExtraJson(layer_name, geojson_data, geometry_type, work_dir):
     with open(work_dir + os.sep + "{0}.json".format(layer_name), "w", encoding="utf-8") as geometry_file:
         json.dump(json_data, geometry_file)
 
-def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, process_fc):
+def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, process_fc, workspace_gdb):
     """
     Führt den Download eines Rechteckes durch
 
@@ -277,6 +291,7 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
     :param layer: zu downloadender Layer
     :param work_dir: lokal ausgewählter Ordner für die json-files
     :param index: iterieren der Dateinamen (bei mehr als einem Rechteck notwendig)
+    :param workspace_gdb: Geodatabase für Zwischenergebnisse
     """
     url = cfg["wfs_config"]["wfs_url"]
 
@@ -308,12 +323,15 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
     geometry_info = getDifferentGeometryTypes(json_file)
     geometry_types = geometry_info["geometry_types"]
     geojson_data = geometry_info["geojson_data"]
-    arcpy.AddMessage(f"Der Layer {v_al_layer} enthält folgende Geometrietypen: {geometry_types}")
+    if len(geometry_types) > 1:
+        arcpy.AddMessage(f"- Der Layer {v_al_layer} enthält mehrere Geometrietypen: {geometry_types}. Diese werden aufgetrennt...")
 
     for geometry_type in geometry_types:
         layer_name_geometry = v_al_layer + "_" + geometry_type + "_" + str(index)
+        output_fc_path = os.path.join(workspace_gdb, layer_name_geometry)
+        
         if len(geometry_types) == 1:
-            arcpy.JSONToFeatures_conversion(json_file, layer_name_geometry)
+            arcpy.JSONToFeatures_conversion(json_file, output_fc_path)
             layer_files.append(layer_name_geometry.rsplit("_", 1)[0])
 
         # in getrennte Dateien schreiben und dann erst in Feature Class konvertieren
@@ -321,7 +339,7 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
             saveExtraJson(layer_name_geometry, geojson_data, geometry_type, work_dir)
 
             arcpy.JSONToFeatures_conversion(
-                work_dir + os.sep + "{0}.json".format(layer_name_geometry), layer_name_geometry
+                work_dir + os.sep + "{0}.json".format(layer_name_geometry), output_fc_path
             )
             # Dateiname für später ohne Bounding Box Info (nötig, weil sonst der Zusatz Geometrietyp fehlt)
             layer_files.append(layer_name_geometry.rsplit("_", 1)[0])
@@ -332,12 +350,10 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
         # fügt Namen der erzeugten Feature Class einer Liste hinzu, zum Löschen (je nach Checkbox) der temporären Daten
         process_fc.append(layer_name_geometry)
 
-    arcpy.AddMessage(f"Layer {v_al_layer} erfolgreich gedownloaded und als json-file in {work_dir} gespeichert")
-
     return layer_files, process_data, process_fc
 
 def shorten_string_fields(output_fc, fields):
-
+    arcpy.AddMessage("- String-Feldlängen kürzen")
     # Liste für die Feldzuordnung
     field_mappings = []
 
@@ -362,10 +378,6 @@ def shorten_string_fields(output_fc, fields):
         arcpy.management.AddFields(output_fc, fields_to_add)
 
     if field_mappings:
-        arcpy.AddMessage(f"Start: Kopiere {e} Felder mit {len(field_mappings)} Feldpaaren in {output_fc}...")
-
-        start_time = time.time()
-
         cursor_fields = []
         for field, field_temp in field_mappings:
             cursor_fields.extend([field, field_temp])
@@ -381,15 +393,6 @@ def shorten_string_fields(output_fc, fields):
                 cursor.updateRow(row)
                 row_count += 1
 
-        cursor_time = time.time() - start_time
-        arcpy.AddMessage(
-            f"UpdateCursor abgeschlossen: {row_count} Zeilen in {cursor_time:.2f} Sekunden ({row_count/cursor_time:.0f} Zeilen/Sek)"
-        )
-
-        # alte Felder löschen, temp-Felder umbenennen
-        arcpy.AddMessage(f"Start: Lösche alte Felder und benenne {e} Felder um...")
-        delete_start = time.time()
-
         # alte Felder löschen, temp-Felder umbenennen
         fields_to_delete = [field for field, _ in field_mappings]
         arcpy.DeleteField_management(output_fc, ";".join(fields_to_delete))  # EINE Operation!
@@ -397,9 +400,6 @@ def shorten_string_fields(output_fc, fields):
         # Dann umbenennen (leider muss das einzeln, aber schneller weil FC kleiner):
         for field, field_temp in field_mappings:
             arcpy.AlterField_management(output_fc, field_temp, new_field_name=field)
-
-        delete_time = time.time() - delete_start
-        arcpy.AddMessage(f"Feldoperationen abgeschlossen in {delete_time:.2f} Sekunden")
 
 def perform_field_calculations(output_fc, gdb):
     """
@@ -419,7 +419,7 @@ def perform_field_calculations(output_fc, gdb):
 
         # Flurstücke - Feldberechnungen
         if output_fc == "nora_v_al_flurstueck":
-            arcpy.AddMessage("Starte Feldberechnungen für Flurstücke...")
+            arcpy.AddMessage("- Starte Feldberechnungen für Flurstücke...")
 
             # Flurnummer-Berechnung benötigt auch v_al_flur
             if arcpy.Exists(os.path.join(gdb, "nora_v_al_flur")):
@@ -432,19 +432,16 @@ def perform_field_calculations(output_fc, gdb):
             # FSK und FLSTKEY
             wfs.field_calculations.calculate_fsk(output_fc_path)
             wfs.field_calculations.calculate_flstkey(output_fc_path)
-            arcpy.AddMessage("Feldberechnungen für Flurstücke abgeschlossen")
 
         # Bodenschätzung - Label-Berechnung
         elif output_fc == "nora_v_al_bodenschaetzung_f":
-            arcpy.AddMessage("Starte Feldberechnungen für Bodenschätzung...")
+            arcpy.AddMessage("- Starte Feldberechnungen für Bodenschätzung...")
             wfs.field_calculations.calculate_label_bodensch(output_fc_path)
-            arcpy.AddMessage("Feldberechnungen für Bodenschätzung abgeschlossen")
 
         # Gebäude - object_id Generierung
         elif output_fc == "nora_v_al_gebaeude":
-            arcpy.AddMessage("Starte Feldberechnungen für Gebäude...")
+            arcpy.AddMessage("- Starte Feldberechnungen für Gebäude...")
             wfs.field_calculations.calculate_gebaeude_object_id(output_fc_path)
-            arcpy.AddMessage("Feldberechnungen für Gebäude abgeschlossen")
 
     except Exception as e:
         arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")
@@ -473,7 +470,3 @@ def intersect(polygon_fc, output_fc):
     arcpy.DeleteFeatures_management(output_lyr)
     arcpy.Delete_management(input_lyr)
     arcpy.Delete_management(output_lyr)
-
-    arcpy.AddMessage(
-        f"Abgerufene Daten des WFS-Dienstes, die vollständig außerhalb von {polygon_fc} liegen, wurden entfernt."
-    )

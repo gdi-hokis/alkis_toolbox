@@ -34,15 +34,15 @@ def calculate_flurnummer_l(flur_fc, flurstueck_fc):
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
+        arcpy.AddMessage("- Flurnummer-ID für Fluren berechnen...")
         arcpy.CalculateField_management(
             flur_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
         )
-        arcpy.AddMessage("Flurnummer-ID für Fluren berechnet")
 
+        arcpy.AddMessage("- Flurnummer-ID für Flurstücke berechnen...")
         arcpy.CalculateField_management(
             flurstueck_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
         )
-        arcpy.AddMessage("Flurnummer-ID für Flurstücke berechnet")
 
         return True
     except Exception as e:
@@ -58,8 +58,8 @@ def join_flurnamen(flurstueck_fc, flur_fc):
     :param flur_fc: Feature Class der Fluren (v_al_flur)
     """
     try:
+        arcpy.AddMessage("- Flurnamen mit Flurstücken verknüpfen...")
         arcpy.JoinField_management(flurstueck_fc, "flurnummer_l", flur_fc, "flurnummer_l", "flurname")
-        arcpy.AddMessage("Flurnamen mit Flurstücken verknüpft")
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Join Flurnamen: {str(e)}")
@@ -74,6 +74,7 @@ def calculate_locator_place(flurstueck_fc):
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
+        arcpy.AddMessage("- Feld Locator-Place für Flurstücke berechnen...")
         arcpy.CalculateField_management(
             flurstueck_fc,
             "locator_place",
@@ -85,7 +86,6 @@ def calculate_locator_place(flurstueck_fc):
     else:
         return gemarkung""",
         )
-        arcpy.AddMessage("Locator-Place für Flurstücke berechnet")
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Berechnung Locator-Place: {str(e)}")
@@ -100,6 +100,7 @@ def calculate_fsk(flurstueck_fc):
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
+        arcpy.AddMessage("- Feld FSK-Kurzform berechnen...")
         arcpy.CalculateField_management(
             flurstueck_fc,
             "fsk",
@@ -114,7 +115,6 @@ def calculate_fsk(flurstueck_fc):
       return fsk""",
             "TEXT",
         )
-        arcpy.AddMessage("FSK-Kurzform berechnet")
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Berechnung FSK: {str(e)}")
@@ -129,13 +129,13 @@ def calculate_flstkey(flurstueck_fc):
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
+        arcpy.AddMessage("- Feld FLSTKEY berechnen...")
         arcpy.CalculateField_management(
             flurstueck_fc,
             "FLSTKEY",
             'str(int(!gemarkung_id!)) + "-" + str(int(!flurnummer!)) + "-" + !flurstueckstext!',
             "PYTHON3",
         )
-        arcpy.AddMessage("FLSTKEY berechnet")
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Berechnung FLSTKEY: {str(e)}")
@@ -204,6 +204,7 @@ def calcBeschriftung(bodenart, nutzungsart, entstehung, klimastufe, wasserstufe,
     return ""
 """
 
+        arcpy.AddMessage("- Feld Label für Bodenschätzung berechnen...")
         arcpy.CalculateField_management(
             bodenschaetzung_fc,
             "label",
@@ -211,7 +212,6 @@ def calcBeschriftung(bodenart, nutzungsart, entstehung, klimastufe, wasserstufe,
             "PYTHON3",
             code_block,
         )
-        arcpy.AddMessage("Label für Bodenschätzung berechnet")
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Berechnung Label Bodenschätzung: {str(e)}")
@@ -229,8 +229,8 @@ def calculate_gebaeude_object_id(gebaeude_fc):
     import uuid
     return str(uuid.uuid4())"""
 
+        arcpy.AddMessage("- Feld object_id für Gebäude generieren...")
         arcpy.CalculateField_management(gebaeude_fc, "object_id", "calcUuid()", "PYTHON3", code_block)
-        arcpy.AddMessage("object_id für Gebäude generiert")
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Generierung object_id Gebäude: {str(e)}")
@@ -245,8 +245,8 @@ def clean_up_flur_fields(flur_fc):
     """
     try:
         if arcpy.ListFields(flur_fc, "flurnummer_l"):
+            arcpy.AddMessage("- Temporäre Felder löschen...")
             arcpy.DeleteField_management(flur_fc, "flurnummer_l")
-            arcpy.AddMessage("Temporäre Felder gelöscht")
         return True
     except Exception as e:
         arcpy.AddWarning(f"Warnung bei Löschen temporärer Felder: {str(e)}")

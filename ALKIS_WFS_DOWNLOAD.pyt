@@ -219,7 +219,7 @@ class wfs_download:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         # Klassenvariablen anlegen
-        self.label = "1. wfs_download"
+        self.label = "1. WFS-Daten herunterladen"
         self.description = "Dieses Tool lädt ALKIS-Daten im definierten Bereich als GeoJSON herunter und konvertiert diese in eine FGDB"
         self.layers = []
 
@@ -361,13 +361,15 @@ class wfs_download:
 
     def execute(self, parameters, _messages):
         """The source code of the tool."""
+        importlib.reload(config.config_loader)
+        importlib.reload(wfs.download)
+
 
         # Get Parameters
         polygon_fc = parameters[0].value
         checked_layers = parameters[1].valueAsText  # semicolon separated string
         target_gdb = parameters[2].valueAsText
         workspace_gdb = parameters[3].valueAsText
-        arcpy.env.workspace = parameters[3].valueAsText
         work_dir = parameters[4].valueAsText
         checkbox = parameters[5].value
         cell_size = parameters[6].value
