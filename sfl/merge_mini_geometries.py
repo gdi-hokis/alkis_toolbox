@@ -104,7 +104,7 @@ def merge(df_main, df_mini, calc_type):
                     best_match_idx = main_idx
 
                     break
-            except:
+            except Exception:
                 pass
 
         # === Merge durchführen ===

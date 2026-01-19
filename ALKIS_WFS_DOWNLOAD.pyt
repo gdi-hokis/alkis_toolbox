@@ -111,7 +111,7 @@ class calc_lage:
             parameterType="Required",
             direction="Input",
         )
-        param3.value = True
+        param3.value = False
 
         params = [param0, param1, param2, param3]
         return params
@@ -1015,12 +1015,6 @@ class wfs_download:
                 arcpy.AddMessage("Starte Feldberechnungen für Bodenschätzung...")
                 wfs_field_calculations.calculate_label_bodensch(output_fc_path)
                 arcpy.AddMessage("Feldberechnungen für Bodenschätzung abgeschlossen")
-
-            # Gebäude - object_id Generierung
-            elif output_fc == "nora_v_al_gebaeude":
-                arcpy.AddMessage("Starte Feldberechnungen für Gebäude...")
-                wfs_field_calculations.calculate_gebaeude_object_id(output_fc_path)
-                arcpy.AddMessage("Feldberechnungen für Gebäude abgeschlossen")
 
         except Exception as e:
             arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")

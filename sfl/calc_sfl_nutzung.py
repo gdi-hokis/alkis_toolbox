@@ -18,7 +18,7 @@ from sfl.init_dataframes import (
 from sfl.merge_mini_geometries import merge_mini_geometries
 
 try:
-    from shapely.geometry import shape
+    import shapely
 
     SHAPELY_AVAILABLE = True
 except ImportError:

@@ -47,7 +47,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
 
         layers = cfg.get("alkis_layers")
 
-        lage_point = os.path.join(gdb_path, layers["lagebezechnung"])
+        lage_point = os.path.join(gdb_path, layers["lagebezeichnung"])
         gebaeude = os.path.join(gdb_path, layers["gebaeude"])
         flurstueck = os.path.join(gdb_path, layers["flurstueck"])
         lage_polygon = os.path.join(gdb_path, layers["strasse_gewann"])

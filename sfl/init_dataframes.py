@@ -87,7 +87,7 @@ def load_nutzung_to_dataframe(cfg, nutzung_table):
                 (
                     oid,
                     fsk,
-                    afl,
+                    amtliche_flaeche,
                     geom,
                     geom_area,
                     obj_art,
@@ -107,7 +107,7 @@ def load_nutzung_to_dataframe(cfg, nutzung_table):
                     {
                         "objectid": oid,
                         "fsk": fsk,
-                        "afl": afl,
+                        "amtliche_flaeche": amtliche_flaeche,
                         "geometry": geom,
                         "geom_area": geom_area,
                         "objektart": obj_art,
@@ -195,7 +195,7 @@ def load_bodenschaetzung_to_dataframe(cfg, workspace):
                     sont_name,
                     bodenzahl,
                     ackerzahl,
-                    afl,
+                    amtliche_flaeche,
                     sfl,
                     emz,
                 ) = row
@@ -224,7 +224,7 @@ def load_bodenschaetzung_to_dataframe(cfg, workspace):
                         "sonstige_angaben_name": sont_name,
                         "bodenzahl": bodenzahl if bodenzahl else 0,
                         "ackerzahl": ackerzahl if ackerzahl else 0,
-                        "amtliche_flaeche": afl,
+                        "amtliche_flaeche": amtliche_flaeche,
                         "sfl": sfl if sfl else 0,
                         "emz": emz if emz else 0,
                     }

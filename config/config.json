@@ -4,7 +4,7 @@
 		"nutzung": "nora_v_al_tatsaechliche_nutzung",
 		"bodenschaetzung": "nora_v_al_bodenschaetzung_f",
 		"bewertung": "nora_v_al_bodenbewertung",
-		"lagebezechnung": "nora_v_al_lagebezeichnung",
+		"lagebezeichnung": "nora_v_al_lagebezeichnung",
 		"gebaeude": "nora_v_al_gebaeude",
 		"strasse_gewann": "nora_v_al_strasse_gewann"
 	},

@@ -16,7 +16,7 @@ from sfl.init_dataframes import (
 from sfl.merge_mini_geometries import merge_mini_geometries
 
 try:
-    from shapely.geometry import shape
+    import shapely
 
     SHAPELY_AVAILABLE = True
 except ImportError:
@@ -135,6 +135,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
         )
 
         arcpy.AddMessage("- Filtere Bewertungen mit relevanten Nutzungen...")
+        # Filterung: Nur relevante Nutzungsarten für Bewertungen behalten -> Landwirtschaft, Vegetation, UnlandVegetationsloseFlaeche und GFLF/ Landwirtschaftliche Betriebsfläche/Forstwirtschaftliche Betriebsfläche und Garten
         arcpy.MakeFeatureLayer_management(
             nutzung_dissolve,
             "nutzung_m_wald",
@@ -154,7 +155,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
         arcpy.MakeFeatureLayer_management(
             "fsk_bewertung_intersect",
             "fsk_bewertung_was",
-            where_clause=f"{bew["klassifizierung_id"]} IN (3480, 3481, 3482, 3490)",
+            where_clause=f'{bew["klassifizierung_id"]} IN (3480, 3481, 3482, 3490)',
         )
 
         arcpy.Erase_analysis("fsk_bewertung_was", "gewaesser_nutzung", "fsk_bewertung_gewaesser", xy_tolerance)
@@ -172,10 +173,6 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
             "fsk_bewertung_dissolve",
             ";".join(bewertung_dissolve_fields),
         )
-
-        # arcpy.DeleteFeatures_management("fsk_bewertung_lyr")
-
-        # Filterung: Nur relevante Nutzungsarten für Bewertungen behalten -> Landwirtschaft, Vegetation, UnlandVegetationsloseFlaeche und GFLF/ Landwirtschaftliche Betriebsfläche/Forstwirtschaftliche Betriebsfläche und Garten
 
         arcpy.AddMessage("- Lade Bewertung in Bodenschätzung und setze Bodenzahl, Ackerzahl und EMZ=0...")
 
@@ -423,7 +420,7 @@ def _write_sfl_to_gdb_boden(workspace, df_main, df_mini):
         raise
 
 
-def finalize_results(cfg, gdb_path, workspace, keep_workdata):
+def finalize_results(gdb_path, workspace, keep_workdata):
     """Übernimmt Ergebnisse in Navigation-Tabellen mit Fieldmapping und Tabellen-Erstellung."""
     try:
 
@@ -453,7 +450,13 @@ def finalize_results(cfg, gdb_path, workspace, keep_workdata):
                 "bodenschaetzung_dissolve",
                 "bodenschaetzung_intersect",
                 "schaetzung_relevante_nutz",
+                "schaetzung_o_bewertung",
                 "fsk_bewertung",
+                "fsk_bewertung_nutz",
+                "fsk_bewertung_merge",
+                "fsk_bewertung_gewaesser",
+                "fsk_bewertung_intersect",
+                "fsk_bewertung_dissolve",
                 "fsk_bewertung_relevant",
             ]
             for wd in workdata:
@@ -497,7 +500,7 @@ def calculate_sfl_bodenschaetzung(
     ):
         return False
 
-    if not finalize_results(cfg, gdb_path, workspace, keep_workdata):
+    if not finalize_results(gdb_path, workspace, keep_workdata):
         return False
 
     return True
