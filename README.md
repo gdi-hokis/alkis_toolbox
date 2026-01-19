@@ -17,20 +17,26 @@ Dieses Tool lädt ALKIS-Daten des ALKIS-WFS des LGL BWs in einem definierten Ber
 
 ### Verschnitt Flurstück & Lagebezeichnung
 
-Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine fsk_x_lage Tabelle.
+Dieses Werkzeug ordnet Lagebezeichnungen (Hausnummern, Straßen, Gewanne) räumlich den Flurstücken zu und erstellt eine Verknüpfungstabelle (fsk_x_lage).
 
-Dieses Werkzeug berechnet räumlich Lagebezeichnungen zu jedem Flurstück. Hintergrund ist der, dass die bestehende Zuordnungstabelle beim LGL über den WFS nicht vollständig heruntergeladen kann und dadurch nicht einfach zum Verketten genutzt werden kann.
-Dieses Werkzeug benötigt folgende Eingabequellen für die Berechnung:
+**Hintergrund:**
+Die offizielle Zuordnungstabelle des LGL ist über den WFS nicht vollständig verfügbar. Dieses Tool berechnet die Zuordnungen daher räumlich neu.
+
+**Ablauf:**
+
+1. **Hausnummern zuordnen:** Lagebezeichnungspunkte werden ihren Gebäuden zugeordnet und dann mit den Flurstücken verschnitten. So erhalten Flurstücke ihre Hausnummern.
+
+2. **Gewanne und Straßen zuordnen:** Für Flurstücke ohne Hausnummern werden Gewanne und Straßenpolygone verschnitten, um Gewann- oder Straßennamen zuzuweisen.
+
+**Eingabedaten:**
 
 - Flurstücke
 - Gebäude
-- Lagebezeichnungen (Punkte aus dem WFS-Dienst)
-- Gewanne und Straßen (Polygone aus dem WFS-Dienst)
+- Lagebezeichnungen (Punkte)
+- Gewanne und Straßen (Polygone)
 
-Zu Beginn werden die Lagebezeichnungspunkte räumlich ihren Gebäuden zugeordnet und anschließend mit den Flurstücken überschnitten, sodass alle Flurstücke mit einem Lagebezeichnungspunkt bereits eine Lagezuordnung haben. Die Zuordnung der Punkte zu ihren Gebäuden erfolgt über eine eigens berechnete uuid, weil die GML-ID des LGLs beim Verketten über arcpy nicht case-sensitive interpretiert wird und es dadurch zu falschen Verknüpfungen kommt. Zudem werden Lagebezeichnungen dann auf ihre Gebäudemittelpunkte gemappt, da einige Punkte neben den Gebäuden und dadurch auf anderen Flurstücken platziert sind.
-
-Für die Flurstücke, die noch keine Lagebezeichnungen haben, werden anschließend die Gewanne und Straßenpolygone überschnitten, sodass sie Gewannnamen oder Straßennamen ohne Hausnummern erhalten.
-Da durch diese eigenen Algorithmen versucht wird, die richtige Zuordnung herzustellen, kann es dementsprechend zu einzelnen Abweichungen im Vergleich zu der tatsächlichen Zuordnung aus den NAS-Daten kommen.
+**Hinweis:**
+Das Tool verwendet eigene räumliche Algorithmen, da einige Lagebezeichnungspunkte neben Gebäuden platziert sind. Dies kann zu einzelnen Abweichungen von der offiziellen Zuordnung in den NAS-Daten führen.
 
 ### Verschnitt Flurstück & Nutzung
 
