@@ -111,7 +111,7 @@ def vectorized_calculate_sfl_nutzung(
             return False
 
         # Merge DataFrames auf FSK um Verbesserungsfaktor zu bekommen
-        df = df_nutzung.merge(df_flurstuecke[["fsk", "verbesserung", "amtliche_flaeche"]], on="fsk", how="left")
+        df = df_nutzung.merge(df_flurstuecke[["fsk", "verbesserung"]], on="fsk", how="left")
 
         # Sortiere nach FSK und Fläche
         df = df.sort_values(["fsk", "geom_area"])
@@ -156,90 +156,96 @@ def vectorized_calculate_sfl_nutzung(
 
 def _apply_delta_correction_nutzung(df, max_shred_qm):
     """Delta-Korrektur je FSK: kleine Deltas proportional auf große Features verteilen."""
+    try:
 
-    start_time = time.time()
-    processed_count = 0
+        start_time = time.time()
+        processed_count = 0
 
-    grouped = df.groupby("fsk", sort=False)
-    total_groups = len(grouped)
-    processed_groups = 0
+        grouped = df.groupby("fsk", sort=False)
+        total_groups = len(grouped)
+        processed_groups = 0
 
-    for fsk, fsk_data in grouped:
-        processed_groups += 1
+        for fsk, fsk_data in grouped:
+            processed_groups += 1
 
-        # Progress alle 50k Gruppen (oder am Ende)
-        if not processed_groups % 50000 or processed_groups == total_groups:
-            elapsed = time.time() - start_time
-            arcpy.AddMessage(f"- Fortschritt: {processed_groups}/{total_groups} FSKs verarbeitet " f"({elapsed:.1f}s)")
+            # Progress alle 50k Gruppen (oder am Ende)
+            if not processed_groups % 50000 or processed_groups == total_groups:
+                elapsed = time.time() - start_time
+                arcpy.AddMessage(
+                    f"- Fortschritt: {processed_groups}/{total_groups} FSKs verarbeitet " f"({elapsed:.1f}s)"
+                )
 
-        afl = fsk_data["amtliche_flaeche"].iloc[0]
+            afl = fsk_data["amtliche_flaeche"].iloc[0]
 
-        non_overlap_mask = fsk_data["is_overlap"] is False
-        fsk_data_main = fsk_data[non_overlap_mask]
-        sfl_sum = fsk_data_main["sfl"].sum()
+            non_overlap_mask = fsk_data["is_overlap"] == False
+            fsk_data_main = fsk_data[non_overlap_mask]
+            sfl_sum = fsk_data_main["sfl"].sum()
 
-        if sfl_sum == afl:
-            processed_count += len(fsk_data)
-            continue
-
-        delta = afl - sfl_sum
-        abs_delta = abs(delta)
-
-        # Nur kleine Deltas korrigieren
-        if abs_delta >= max_shred_qm:
-            processed_count += len(fsk_data)
-            continue
-
-        # Sortiere Features nach SFL absteigend
-        fsk_indices = fsk_data.index
-        sorted_idx = fsk_data["sfl"].values.argsort()[::-1]
-        sorted_indices = fsk_indices[sorted_idx]
-
-        # Nur Features >= max_shred_qm berücksichtigen
-        eligible_indices = [
-            idx for idx in sorted_indices if idx in fsk_data_main.index and fsk_data.at[idx, "sfl"] >= max_shred_qm
-        ]
-
-        if not eligible_indices:
-            # Nichts zu korrigieren, weil keine geeigneten Features vorhanden
-            processed_count += len(fsk_data)
-            continue
-
-        total_sfl_eligible = float(sum(df.at[idx, "sfl"] for idx in eligible_indices))
-        if total_sfl_eligible <= 0:
-            processed_count += len(fsk_data)
-            continue
-
-        # Verteile abs_delta: alle außer dem größten bekommen Anteile, der größte bekommt den Rest
-        first_idx = eligible_indices[0]  # größtes Feature
-        shares = {}
-
-        sum_other = 0
-        for idx in eligible_indices[1:]:
-            sfl = float(df.at[idx, "sfl"])
-            ratio = sfl / total_sfl_eligible
-            share = int(abs_delta * ratio)
-            shares[idx] = share
-            sum_other += share
-
-        # Rest geht an größtes Feature, damit Summe exakt abs_delta wird
-        remainder = abs_delta - sum_other
-        shares[first_idx] = remainder
-
-        # Anwenden (Vorzeichen beachten)
-        sign = 1 if delta >= 0 else -1
-        for idx, share in shares.items():
-            if not share:
+            if sfl_sum == afl:
+                processed_count += len(fsk_data)
                 continue
-            old_sfl = df.at[idx, "sfl"]
-            new_sfl = old_sfl + (sign * share)
-            df.at[idx, "sfl"] = new_sfl
 
-        processed_count += len(fsk_data)
+            delta = afl - sfl_sum
+            abs_delta = abs(delta)
 
-    total_time = time.time() - start_time
-    arcpy.AddMessage(f"- Delta-Korrektur abgeschlossen: {processed_count} Features in {total_time:.1f}s")
-    return df
+            # Nur kleine Deltas korrigieren
+            if abs_delta >= max_shred_qm:
+                processed_count += len(fsk_data)
+                continue
+
+            # Sortiere Features nach SFL absteigend
+            fsk_indices = fsk_data.index
+            sorted_idx = fsk_data["sfl"].values.argsort()[::-1]
+            sorted_indices = fsk_indices[sorted_idx]
+
+            # Nur Features >= max_shred_qm berücksichtigen
+            eligible_indices = [
+                idx for idx in sorted_indices if idx in fsk_data_main.index and fsk_data.at[idx, "sfl"] >= max_shred_qm
+            ]
+
+            if not eligible_indices:
+                # Nichts zu korrigieren, weil keine geeigneten Features vorhanden
+                processed_count += len(fsk_data)
+                continue
+
+            total_sfl_eligible = float(sum(df.at[idx, "sfl"] for idx in eligible_indices))
+            if total_sfl_eligible <= 0:
+                processed_count += len(fsk_data)
+                continue
+
+            # Verteile abs_delta: alle außer dem größten bekommen Anteile, der größte bekommt den Rest
+            first_idx = eligible_indices[0]  # größtes Feature
+            shares = {}
+
+            sum_other = 0
+            for idx in eligible_indices[1:]:
+                sfl = float(df.at[idx, "sfl"])
+                ratio = sfl / total_sfl_eligible
+                share = int(abs_delta * ratio)
+                shares[idx] = share
+                sum_other += share
+
+            # Rest geht an größtes Feature, damit Summe exakt abs_delta wird
+            remainder = abs_delta - sum_other
+            shares[first_idx] = remainder
+
+            # Anwenden (Vorzeichen beachten)
+            sign = 1 if delta >= 0 else -1
+            for idx, share in shares.items():
+                if not share:
+                    continue
+                old_sfl = df.at[idx, "sfl"]
+                new_sfl = old_sfl + (sign * share)
+                df.at[idx, "sfl"] = new_sfl
+
+            processed_count += len(fsk_data)
+
+        total_time = time.time() - start_time
+        arcpy.AddMessage(f"- Delta-Korrektur abgeschlossen: {processed_count} Features in {total_time:.1f}s")
+        return df
+    except Exception as e:
+        arcpy.AddError(f"Fehler bei apply_delta_correction: {str(e)}")
+        return False
 
 
 def _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini):

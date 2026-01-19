@@ -52,9 +52,6 @@ Schema aus dem WFS des LGLs
 - Flurstücke (nora_v_al_flurstueck)
 - Tatsächliche Nutzung (nora_v_al_tatsaechliche_nutzung)
 
-Weitere Voraussetzung ist die Installation des shapely-Moduls in der Python-Umgebung.
-Hierfür wird empfohlen die Python-Umgebung zu klonen und über den Paketmanager in ArcGIS Pro zu arbeiten siehe https://pro.arcgis.com/de/pro-app/3.5/arcpy/get-started/add-a-package.htm
-
 **Ablauf:**
 
 1. Verschnitt Flurstücke und Nutzung
@@ -77,8 +74,6 @@ Schema aus dem WFS des LGLs
 - Bodenschätzung (nora_v_al_bodenschaetzung)
 - Bewertungsflächen (nora_v_al_bewertung)
 - Nutzungsverschnitt (flst_x_nutzung - Ergebnis des Werkzeugs Verschnitt Flurstück & Nutzung)
-
-Weitere Voraussetzung ist die Installation des shapely-Moduls in der Python-Umgebung.
 
 **Ablauf:**
 
