@@ -11,18 +11,20 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 
 ## Tools
 
-### <u>WFS Download</u>
+### WFS Download
 
 Dieses Tool lädt ALKIS-Daten des ALKIS-WFS des LGL BWs in einem definierten Bereich (Polygonlayer) als GeoJSON herunter und konvertiert diese in zweidimensionale Featureklassen in einer FGDB.
 
-### <u>Verschnitt Flurstück & Lagebezeichnung</u>
+### Verschnitt Flurstück & Lagebezeichnung
 
 Dieses Werkzeug ordnet Lagebezeichnungen (Hausnummern, Straßen, Gewanne) räumlich den Flurstücken zu und erstellt eine Verknüpfungstabelle (fsk_x_lage).
 
 **Hintergrund:**
+
 Die offizielle Zuordnungstabelle des LGL ist über den WFS nicht vollständig verfügbar. Dieses Tool berechnet die Zuordnungen daher räumlich neu.
 
 **Eingabedaten:**
+
 Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck)
@@ -39,11 +41,12 @@ Schema aus dem WFS des LGLs
 **Hinweis:**
 Das Tool verwendet eigene räumliche Algorithmen, da einige Lagebezeichnungspunkte neben Gebäuden platziert sind. Dies kann zu einzelnen Abweichungen von der offiziellen Zuordnung in den NAS-Daten führen.
 
-### <u>Verschnitt Flurstück & Nutzung</u>
+### Verschnitt Flurstück & Nutzung
 
 Berechnet Schnittflächen (SFL) von den Flurstücken mit der tatsächlichen Nutzung und erstellt eine Verschnitt-Feature-Klasse fsk_x_nutzung.
 
 **Eingabedaten:**
+
 Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck)
@@ -59,13 +62,15 @@ Hierfür wird empfohlen die Python-Umgebung zu klonen und über den Paketmanager
 3. Berechnung der Schnittflächen und Deltakorrektur zur amtlichen Flurstücksfläche
 
 **Hinweis:**
+
 Die Ergebnisse wurden mit denen des LGLs verglichen und man kommt auf eine 99,5%-ige Übereinstimmung in den Stichproben. Die Unterschiede betragen +/- 1m² und lassen sich auf Rundungsungenauigkeiten zurückführen. Trotzdem kann es zu Unterschieden kommen, da der Algorithmus des LGLs nicht bekannt ist und somit Berechnungsunterschiede vorhanden sein werden.
 
-### <u>Verschnitt Flurstück & Bodenschätzung</u>
+### Verschnitt Flurstück & Bodenschätzung
 
 Berechnet Schnittflächen (SFL) von den Flurstücken mit der Bodenschätzung und Bodenbewertung. Berechnet die EMZ der Bodenschätzungsflächen. Endergebnis ist eine Verschnitt-Feature-Klasse fsk_x_bodenschaetzung, in der sowohl Bodenschätzung als auch Bewertungsflächen enthalten sind (sonstige_angaben_id = 9999).
 
 **Eingabedaten:**
+
 Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck)
@@ -88,6 +93,7 @@ Weitere Voraussetzung ist die Installation des shapely-Moduls in der Python-Umge
 Bei den Bewertungen wird die gerundete Fläche aus Objektfläche\* Verbesserungsfaktor Flurstück berechnet. Der Verbesserungsfaktor Flurstück ergibt sich aus amtliche Fläche/geometrische Fläche des Flurstücks. EMZ ist 0.
 
 **Hinweis:**
+
 Relevante Nutzungsarten für Bodenschätzung: Landwirtschaft (43001), Heide (43004), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
 
 relevante Nutzungsarten für Bewertung: Landwirtschaft (43001), Wald (43002), Gehölz (43003), Heide (43004), Moor (43005), Sumpf (43006), Unland (43007) , GFLF (41006 - 2700), BLW (41006 - 6800), BFW (41006 - 7600), Garten (41008 - 4460)
