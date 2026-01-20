@@ -215,39 +215,39 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
             output_fc_path = os.path.join(workspace_gdb, output_fc)
             arcpy.Merge_management(fc, output_fc_path)
 
-        # Alle Felder auflisten
-        fields = arcpy.ListFields(output_fc)
-        field_names = [field.name for field in fields]
+            # Alle Felder auflisten
+            fields = arcpy.ListFields(output_fc_path)
+            field_names = [field.name for field in fields]
 
-        identify_fields = ["Shape"]
-        for identity_field in cfg["wfs_config"]["identify_fields"]:
-            if identity_field in field_names:
-                identify_fields.append(identity_field)
+            identify_fields = ["Shape"]
+            for identity_field in cfg["wfs_config"]["identify_fields"]:
+                if identity_field in field_names:
+                    identify_fields.append(identity_field)
 
-        param = ";".join(identify_fields)
-        arcpy.DeleteIdentical_management(output_fc, "{0}".format(param))
+            param = ";".join(identify_fields)
+            arcpy.DeleteIdentical_management(output_fc_path, "{0}".format(param))
 
-        arcpy.AddField_management(in_table=output_fc, field_name="Abrufdatum", field_type="DATE")
+            arcpy.AddField_management(in_table=output_fc_path, field_name="Abrufdatum", field_type="DATE")
 
-        shorten_string_fields(output_fc, fields)
+            shorten_string_fields(output_fc_path, fields)
 
-        output_fc_2D = output_fc + "_tmp"
-        arcpy.env.outputZFlag = "Disabled"
-        arcpy.env.outputMFlag = "Disabled"
+            output_fc_2D = output_fc + "_tmp"
+            arcpy.env.outputZFlag = "Disabled"
+            arcpy.env.outputMFlag = "Disabled"
 
-        arcpy.AddMessage("- 2D-Konvertierung...")
-        arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc, out_path=target_gdb, out_name=output_fc_2D)
+            arcpy.AddMessage("- 2D-Konvertierung...")
+            arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc_path, out_path=target_gdb, out_name=output_fc_2D)
 
-        arcpy.Delete_management(output_fc)
-        
-        # Ab hier in target_gdb arbeiten
-        arcpy.AddMessage("- Z-Werte entfernen...")
-        output_fc_final = os.path.join(target_gdb, output_fc_2D)
-        output_fc_target = os.path.join(target_gdb, output_fc)
-        arcpy.Rename_management(output_fc_final, output_fc_target)
+            arcpy.Delete_management(output_fc_path)
+            
+            # Ab hier in target_gdb arbeiten
+            arcpy.AddMessage("- Z-Werte entfernen...")
+            output_fc_final = os.path.join(target_gdb, output_fc_2D)
+            output_fc_target = os.path.join(target_gdb, output_fc)
+            arcpy.Rename_management(output_fc_final, output_fc_target)
 
-        arcpy.AddMessage("- vollständig außerhalb des Eingabepolygons liegende Geometrien entfernen...")
-        intersect(polygon_fc, output_fc_target)
+            arcpy.AddMessage("- vollständig außerhalb des Eingabepolygons liegende Geometrien entfernen...")
+            intersect(polygon_fc, output_fc_target)
         i += 1
     return process_data, process_fc
 
@@ -334,6 +334,8 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
         # in getrennte Dateien schreiben und dann erst in Feature Class konvertieren
         elif len(geometry_types) > 1:
             saveExtraJson(layer_name_geometry, geojson_data, geometry_type, work_dir)
+            extra_json_file = work_dir + os.sep + f"{layer_name_geometry}.json"
+            process_data.append(extra_json_file)
 
             arcpy.JSONToFeatures_conversion(
                 work_dir + os.sep + "{0}.json".format(layer_name_geometry), output_fc_path
