@@ -13,7 +13,7 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 
 ### WFS Download
 
-Dieses Tool lädt ALKIS-Daten des ALKIS-WFS des LGL BWs in einem definierten Bereich (Polygonlayer) als GeoJSON herunter und konvertiert diese in zweidimensionale Featureklassen in einer FGDB.
+Dieses Tool lädt ALKIS-Daten des ALKIS-WFS des LGL BWs in einem definierten Bereich (Polygonlayer) als GeoJSON herunter und konvertiert diese in zweidimensionale Feature-Classes in einer FGDB.
 
 ### Verschnitt Flurstück & Lagebezeichnung
 
@@ -43,7 +43,7 @@ Das Tool verwendet eigene räumliche Algorithmen, da einige Lagebezeichnungspunk
 
 ### Verschnitt Flurstück & Nutzung
 
-Berechnet Schnittflächen (SFL) von den Flurstücken mit der tatsächlichen Nutzung und erstellt eine Verschnitt-Feature-Klasse fsk_x_nutzung.
+Berechnet Schnittflächen (SFL) von den Flurstücken mit der tatsächlichen Nutzung und erstellt eine Verschnitt-Feature-Class fsk_x_nutzung.
 
 **Eingabedaten:**
 
@@ -64,7 +64,7 @@ Die Ergebnisse wurden mit denen des LGLs verglichen und man kommt auf eine 99,5%
 
 ### Verschnitt Flurstück & Bodenschätzung
 
-Berechnet Schnittflächen (SFL) von den Flurstücken mit der Bodenschätzung und Bodenbewertung. Berechnet die EMZ der Bodenschätzungsflächen. Endergebnis ist eine Verschnitt-Feature-Klasse fsk_x_bodenschaetzung, in der sowohl Bodenschätzung als auch Bewertungsflächen enthalten sind (sonstige_angaben_id = 9999).
+Berechnet Schnittflächen (SFL) von den Flurstücken mit der Bodenschätzung und Bodenbewertung. Berechnet die EMZ der Bodenschätzungsflächen. Endergebnis ist eine Verschnitt-Feature-Class fsk_x_bodenschaetzung, in der sowohl Bodenschätzung als auch Bewertungsflächen enthalten sind (sonstige_angaben_id = 9999).
 
 **Eingabedaten:**
 

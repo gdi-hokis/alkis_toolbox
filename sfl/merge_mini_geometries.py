@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2024, Jana Muetsch, Andre Voelkner, LRA Hohenlohekreis
-# All rights reserved.
 
 """
 Generalisierte Mini-Flächen-Merge-Utilities für SFL-Berechnungen (Nutzung und Bodenschätzung).
