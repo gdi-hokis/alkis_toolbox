@@ -15,7 +15,7 @@
 		"shape_area": "SHAPE@AREA",
 		"amtliche_flaeche": "amtliche_flaeche",
 		"objectid": "OBJECTID",
-		"fsk": "fsk_ohne_ff"
+		"fsk": "fsk"
 	},
 
 	"lagebezeichnung": {
