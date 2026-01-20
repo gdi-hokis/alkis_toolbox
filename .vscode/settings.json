@@ -1,0 +1,11 @@
+{
+  "pylint.enabled": true,
+  "pylint.args": [
+    "--disable=all",
+    "--enable=E,F, W, C",
+    "--disable=line-too-long",
+     "--disable=no-member",
+     "--disable=broad-except",
+    "--disable=assigning-non-slot"
+  ]
+}
