@@ -55,176 +55,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl, alkis_eigentuemer]
-
-
-class calc_lage_tool:
-    def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
-        self.label = "Lagebezeichnungen zuordnen"
-        self.description = "Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine Navigation_Lage Tabelle"
-
-    def getParameterInfo(self):
-        """Define the tool parameters."""
-        param0 = arcpy.Parameter(
-            displayName="Ziel-Geodatabase wählen",
-            name="existing_geodatabase",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank für temporäre Daten",
-            name="workspace_database",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        params = [param0, param1]
-        return params
-
-    def isLicensed(self):
-        """Set whether the tool is licensed to execute."""
-        return True
-
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal validation is performed."""
-        return
-
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool parameter."""
-        workspace_param = parameters[0]
-
-        if workspace_param.value:
-            workspace_path = workspace_param.valueAsText
-            if not workspace_path.lower().endswith(".gdb"):
-                workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
-        return
-
-    def execute(self, parameters, _messages):
-        gdb_path = parameters[0].valueAsText
-        work_folder = parameters[1].valueAsText
-
-        try:
-            import calc_lage
-
-            importlib.reload(calc_lage)
-            arcpy.AddMessage(f"Starte Lagebezeichnungsberechnung für {gdb_path}")
-
-            success = calc_lage.calculate_lage(work_folder, gdb_path)
-
-            if success:
-                arcpy.AddMessage("Lagebezeichnungsberechnung erfolgreich abgeschlossen")
-            else:
-                arcpy.AddError("Lagebezeichnungsberechnung fehlgeschlagen")
-
-            return success
-
-        except Exception as e:
-            arcpy.AddError(f"Fehler bei Lagebezeichnungsberechnung: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            return False
-
-
-class calc_sfl:
-    """
-    ArcGIS Toolbox Tool für SFL- und EMZ-Berechnung (optimierte Version).
-    """
-
-    def __init__(self):
-        self.label = "SFL & EMZ Berechnung (optimiert)"
-        self.description = """
-        Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) 
-        mit optimierter Pandas-Vectorisierung (~5-10x schneller).
-        """
-        self.canRunInBackground = True
-
-    def getParameterInfo(self):
-        """Definiert die Tool-Parameter."""
-
-        # Parameter 1: GDB Path
-        param0 = arcpy.Parameter(
-            displayName="Geodatabase",
-            name="gdb_path",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-        param0.filter.list = ["File Geodatabase"]
-
-        # Parameter 2: Workspace
-        param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank",
-            name="workspace",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        # Parameter 5: Output Message
-        param2 = arcpy.Parameter(
-            displayName="Ergebnis",
-            name="output",
-            datatype="GPString",
-            parameterType="Derived",
-            direction="Output",
-        )
-
-        return [param0, param1, param2]
-
-    def isLicensed(self):
-        """Lizenzprüfung."""
-        # Keine speziellen Extensions erforderlich
-        return True
-
-    def updateParameters(self, parameters):
-        """Aktualisiere Parameter wenn sich andere Parameter ändern."""
-        pass
-
-    def updateMessages(self, parameters):
-        """Validiere Parameter."""
-        pass
-
-    def execute(self, parameters, messages):
-        """Hauptlogik des Tools."""
-
-        try:
-            import calc_sfl_optimized
-
-            importlib.reload(calc_sfl_optimized)
-            # Parse Parameter
-            gdb_path = parameters[0].valueAsText
-            workspace = parameters[1].valueAsText
-
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("SFL & EMZ BERECHNUNG - OPTIMIERTE VERSION")
-            arcpy.AddMessage("=" * 70)
-
-            arcpy.AddMessage("\nStarte OPTIMIERTE Berechnung...")
-            success = calc_sfl_optimized.calculate_sfl_optimized(gdb_path, workspace)
-
-            if not success:
-                arcpy.AddError("Berechnung fehlgeschlagen!")
-                parameters[2].value = "✗ FEHLER"
-                return
-
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("✓ BERECHNUNG ABGESCHLOSSEN")
-            arcpy.AddMessage("=" * 70)
-
-            # Output
-            parameters[2].value = "✓ Erfolgreich abgeschlossen"
-
-        except Exception as e:
-            arcpy.AddError(f"Fehler: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            parameters[2].value = f"✗ Fehler: {str(e)}"
+        self.tools = [wfs_download, alkis_eigentuemer]
 
 
 class wfs_download:
@@ -842,12 +673,12 @@ class wfs_download:
         )
 
 
-
 class alkis_eigentuemer:
     """
-    ArcGIS Toolbox Tool für das Verknüpfen von ALKIS-Eigentümerdaten 
+    ArcGIS Toolbox Tool für das Verknüpfen von ALKIS-Eigentümerdaten
     Eigentümerdaten einer CSV-Datei werden mit ALKIS-Flurstücken verknüpft
     """
+
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "alkis_eigentuemer"
@@ -889,7 +720,7 @@ class alkis_eigentuemer:
             name="endresult_table_eigentuemer",
             datatype="DETable",
             parameterType="Required",
-            direction="Output"
+            direction="Output",
         )
 
         param4 = arcpy.Parameter(
@@ -897,7 +728,7 @@ class alkis_eigentuemer:
             name="buffer_size",
             datatype="GPDouble",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
         param4.category = "Weitere Parameter"
         param4.value = 500
@@ -940,7 +771,9 @@ class alkis_eigentuemer:
                 fld_gemeinde = cfg["gemeinde"]["gemeinde_name"]
                 fields = [f.name.lower() for f in arcpy.ListFields(fc_gemeinden.value)]
                 if fld_gemeinde.lower() not in fields:
-                    fc_gemeinden.setErrorMessage(f"Die Feature Class enthält kein Feld '{fld_gemeinde}'. Bitte prüfen Sie die Datenstruktur.")
+                    fc_gemeinden.setErrorMessage(
+                        f"Die Feature Class enthält kein Feld '{fld_gemeinde}'. Bitte prüfen Sie die Datenstruktur."
+                    )
             except Exception as e:
                 fc_gemeinden.setErrorMessage(f"Fehler beim Lesen der Feature Class: {str(e)}")
 
@@ -971,7 +804,9 @@ class alkis_eigentuemer:
         output_table = parameters[3].valueAsText
         buffer_size = parameters[4].value
         keep_temp_data = parameters[5].value
-        owner.copy_alkis_eigentuemer.copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data)
+        owner.copy_alkis_eigentuemer.copy_alkis_eigentuemer(
+            alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data
+        )
         return
 
     def postExecute(self, parameters):
