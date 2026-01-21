@@ -26,18 +26,15 @@ import requests
 import importlib
 import arcpy
 import wfs_field_calculations
-import lage.calc_lage
-import sfl.calc_sfl_nutzung
-import sfl.calc_sfl_bodenschaetzung
+
+
 import config.config_loader
 import sfl.init_dataframes
 import sfl.merge_mini_geometries
 
-importlib.reload(lage.calc_lage)
+
 importlib.reload(config.config_loader)
 importlib.reload(sfl.init_dataframes)
-importlib.reload(sfl.calc_sfl_nutzung)
-importlib.reload(sfl.calc_sfl_bodenschaetzung)
 importlib.reload(sfl.merge_mini_geometries)
 
 
@@ -86,6 +83,7 @@ class calc_lage:
             parameterType="Required",
             direction="Input",
         )
+        param0.filter.list = ["File Geodatabase"]
 
         param1 = arcpy.Parameter(
             displayName="Arbeitsdatenbank für temporäre Daten",
@@ -94,6 +92,7 @@ class calc_lage:
             parameterType="Required",
             direction="Input",
         )
+        param1.filter.list = ["File Geodatabase"]
 
         param2 = arcpy.Parameter(
             displayName="Zwischenergebnisse speichern?",
@@ -126,13 +125,15 @@ class calc_lage:
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool parameter."""
-        workspace_param = parameters[0]
+        gdb_param = parameters[0].valueAsText
 
-        if workspace_param.value:
-            workspace_path = workspace_param.valueAsText
-            if not workspace_path.lower().endswith(".gdb"):
-                workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
-        return
+        if gdb_param:
+            gdb_path = os.path.join(gdb_param, "fsk_x_lage")
+            if arcpy.Exists(gdb_path):
+                parameters[0].setWarningMessage(
+                    "Die Feature-Class 'fsk_x_lage' existiert bereits in der Geodatabase und wird überschrieben."
+                )
+        pass
 
     def execute(self, parameters, _messages):
         gdb_path = parameters[0].valueAsText
@@ -141,6 +142,9 @@ class calc_lage:
         save_fc = parameters[3].value
 
         try:
+            import lage.calc_lage
+
+            importlib.reload(lage.calc_lage)
             success = lage.calc_lage.calculate_lage(cfg, work_folder, gdb_path, keep_workdata, save_fc)
 
             if not success:
@@ -180,6 +184,7 @@ class calc_sfl_bodenschaetzung:
             parameterType="Required",
             direction="Input",
         )
+        param1.filter.list = ["File Geodatabase"]
 
         param2 = arcpy.Parameter(
             displayName="Arbeitsdaten behalten?",
@@ -188,7 +193,7 @@ class calc_sfl_bodenschaetzung:
             parameterType="Required",
             direction="Input",
         )
-        param2.value = True
+        param2.value = False
 
         param3 = arcpy.Parameter(
             displayName="XY-Toleranz für Überschneidungen",
@@ -221,7 +226,7 @@ class calc_sfl_bodenschaetzung:
         param5.category = "Schwellenwerte Kleinstflächen"
 
         param6 = arcpy.Parameter(
-            displayName="Minimalgröße zum Erhalt (m²)",
+            displayName="Minimalgröße zum Merge (m²)",
             name="merge_area",
             datatype="GPLong",
             parameterType="Required",
@@ -231,16 +236,26 @@ class calc_sfl_bodenschaetzung:
         param6.category = "Schwellenwerte Kleinstflächen"
 
         param7 = arcpy.Parameter(
+            displayName="Mindestgröße (Löschschwelle - m²)",
+            name="delete_area",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input",
+        )
+        param7.value = 0.1
+        param7.category = "Schwellenwerte Kleinstflächen"
+
+        param8 = arcpy.Parameter(
             displayName="Nicht gemergte Kleinstflächen löschen?",
             name="delete_not_merged_mini",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input",
         )
-        param7.value = True
-        param7.category = "Schwellenwerte Kleinstflächen"
+        param8.value = True
+        param8.category = "Schwellenwerte Kleinstflächen"
 
-        return [param0, param1, param2, param3, param4, param5, param6, param7]
+        return [param0, param1, param2, param3, param4, param5, param6, param7, param8]
 
     def isLicensed(self):
         """Lizenzprüfung."""
@@ -267,14 +282,18 @@ class calc_sfl_bodenschaetzung:
         """Hauptlogik des Tools."""
 
         try:
+            import sfl.calc_sfl_bodenschaetzung
+
+            importlib.reload(sfl.calc_sfl_bodenschaetzung)
             # Parse Parameter
             gdb_path = parameters[0].valueAsText
             workspace = parameters[1].valueAsText
             keep_workdata = parameters[2].value
             flaechenformindex = parameters[4].value
             max_shred_area = parameters[5].value
-            merge_area = parameters[6].value
-            delete_not_merged_minis = parameters[7].value
+            min_merge_area = parameters[6].value
+            max_delete_area = parameters[7].value
+            delete_not_merged_minis = parameters[8].value
             xy_tolerance = parameters[3].valueAsText
 
             success = sfl.calc_sfl_bodenschaetzung.calculate_sfl_bodenschaetzung(
@@ -284,8 +303,9 @@ class calc_sfl_bodenschaetzung:
                 keep_workdata,
                 flaechenformindex,
                 max_shred_area,
-                merge_area,
+                min_merge_area,
                 delete_not_merged_minis,
+                max_delete_area,
                 xy_tolerance,
             )
 
@@ -325,6 +345,7 @@ class calc_sfl_nutzung:
             parameterType="Required",
             direction="Input",
         )
+        param1.filter.list = ["File Geodatabase"]
 
         param2 = arcpy.Parameter(
             displayName="Arbeitsdaten behalten?",
@@ -366,7 +387,7 @@ class calc_sfl_nutzung:
         param5.category = "Schwellenwerte Kleinstflächen"
 
         param6 = arcpy.Parameter(
-            displayName="Minimalgröße zum Erhalt (m²)",
+            displayName="Minimalgröße zum Merge (m²)",
             name="merge_area",
             datatype="GPLong",
             parameterType="Required",
@@ -376,16 +397,26 @@ class calc_sfl_nutzung:
         param6.category = "Schwellenwerte Kleinstflächen"
 
         param7 = arcpy.Parameter(
+            displayName="Mindestgröße (Löschschwelle - m²)",
+            name="delete_area",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input",
+        )
+        param7.value = 0.1
+        param7.category = "Schwellenwerte Kleinstflächen"
+
+        param8 = arcpy.Parameter(
             displayName="Nicht gemergte Kleinstflächen löschen?",
             name="delete_not_merged_mini",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input",
         )
-        param7.value = True
-        param7.category = "Schwellenwerte Kleinstflächen"
+        param8.value = True
+        param8.category = "Schwellenwerte Kleinstflächen"
 
-        return [param0, param1, param2, param3, param4, param5, param6, param7]
+        return [param0, param1, param2, param3, param4, param5, param6, param7, param8]
 
     def isLicensed(self):
         """Lizenzprüfung."""
@@ -410,6 +441,9 @@ class calc_sfl_nutzung:
         """Hauptlogik des Tools."""
 
         try:
+            import sfl.calc_sfl_nutzung
+
+            importlib.reload(sfl.calc_sfl_nutzung)
             # Parse Parameter
             gdb_path = parameters[0].valueAsText
             workspace = parameters[1].valueAsText
@@ -418,7 +452,8 @@ class calc_sfl_nutzung:
             flaechenformindex = parameters[4].value
             max_shred_area = parameters[5].value
             merge_area = parameters[6].value
-            not_merged_mini_delete = parameters[7].value
+            delete_area = parameters[7].value
+            not_merged_mini_delete = parameters[8].value
 
             success = sfl.calc_sfl_nutzung.calculate_sfl_nutzung(
                 cfg,
@@ -429,6 +464,7 @@ class calc_sfl_nutzung:
                 max_shred_area,
                 merge_area,
                 not_merged_mini_delete,
+                delete_area,
                 xy_tolerance,
             )
 

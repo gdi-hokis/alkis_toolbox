@@ -9,8 +9,9 @@ Optimierte SFL- und EMZ-Berechnung mit Pandas-Vectorisierung und Spatial-Index G
 import os
 import math
 import time
-import arcpy
 import pandas as pd
+import arcpy
+from utils import add_step_message
 from sfl.init_dataframes import (
     load_nutzung_to_dataframe,
     load_flurstuecke_to_dataframe,
@@ -33,9 +34,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
     Returns:
         bool: True bei Erfolg, False bei Fehler
     """
-    arcpy.AddMessage("-" * 40)
-    arcpy.AddMessage("Schritt 1 von 8 -- Vorbereitung der Bodenschätzungs-Daten...")
-    arcpy.AddMessage("-" * 40)
+    add_step_message("Vorbereitung der Bodenschätzungs-Daten", 1, 8)
 
     arcpy.env.workspace = workspace
 
@@ -130,9 +129,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
         )
         arcpy.Erase_analysis("schaetzung_relevante_nutz", "bewertung_lyr", "fsk_bodenschaetzung", xy_tolerance)
 
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 2 von 8 -- Hinzufügen der Bewertungsflächen...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Hinzufügen der Bewertungsflächen", 2, 8)
 
         arcpy.AddMessage("- Verschneide Flurstück und Bewertung...")
         # Bewertungsflächenverschnitt
@@ -199,9 +196,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
             bod["sonstige_angaben_name"],
         )
 
-        arcpy.Append_management(
-            "fsk_bewertung_dissolve", "fsk_bodenschaetzung", "NO_TEST", field_mapping, expression="shape_area > 0.5"
-        )
+        arcpy.Append_management("fsk_bewertung_dissolve", "fsk_bodenschaetzung", "NO_TEST", field_mapping)
 
         # Bewertungsflächenanhang konstante Werte setzen
         with arcpy.da.UpdateCursor(
@@ -224,7 +219,15 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
 
 
 def vectorized_calculate_sfl_boden(
-    cfg, gdb_path, workspace, max_shred_qm, merge_area, flaechenformindex, delete_unmerged_mini, nutzung_dissolve
+    cfg,
+    gdb_path,
+    workspace,
+    max_shred_qm,
+    merge_area,
+    flaechenformindex,
+    delete_unmerged_mini,
+    delete_area,
+    nutzung_dissolve,
 ):
     """
     Führt die SFL- und EMZ-Berechnung für Bodenschätzung durch mit Pandas-Vectorisierung.
@@ -241,9 +244,7 @@ def vectorized_calculate_sfl_boden(
     """
 
     try:
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 3 von 8 -- Erstelle pandas-Dataframes...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Erstelle pandas-Dataframes", 3, 8)
         # Laden in DataFrame
         df_flurstuecke = load_flurstuecke_to_dataframe(cfg, gdb_path)
         if df_flurstuecke is False or df_flurstuecke.empty:
@@ -296,11 +297,10 @@ def vectorized_calculate_sfl_boden(
         df["sfl"] = (df["geom_area"] * df["verbesserung"] + 0.5).astype(int)
         df["emz"] = (df["sfl"] / 100 * df["ackerzahl"]).round().astype(int)
 
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 4 von 8 -- Vereinige Kleinstflächen geometrisch mit Nachbarn (im Dataframe)...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Vereinige Kleinstflächen geometrisch mit Nachbarn", 4, 8)
+
         df_main, df_mini, df_not_merged = merge_mini_geometries(
-            df, max_shred_qm, merge_area, flaechenformindex, "bodenschaetzung"
+            df, workspace, max_shred_qm, merge_area, flaechenformindex, delete_area, "bodenschaetzung"
         )
         if delete_unmerged_mini:
             df_mini = pd.concat([df_mini, df_not_merged], ignore_index=True)
@@ -308,9 +308,7 @@ def vectorized_calculate_sfl_boden(
                 f"- {len(df_not_merged)} Kleinstflächen, die nicht gemerged wurden, werden am Ende zusätzlich gelöscht..."
             )
 
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 5 von 8 -- Nachbearbeitung der Bewertungsflächen nach Merge...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Nachbearbeitung der Bewertungsflächen nach Merge", 5, 8)
 
         bewertung_mask = df_main["sonstige_angaben_id"] == 9999
         df_bodenschaetzung = df_main[~bewertung_mask].copy()  # Nur echte Bodenschätzungen
@@ -319,16 +317,14 @@ def vectorized_calculate_sfl_boden(
         if bewertung_mask.any():
             df_bewertung.loc[bewertung_mask, "emz"] = 0
 
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 6 von 8 -- Verteile die Delta-Flächen...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Verteile die Delta-Flächen", 6, 8)
+
         df_bodenschaetzung = _apply_delta_correction_boden(df_bodenschaetzung, max_shred_qm)
 
         df_main = pd.concat([df_bodenschaetzung, df_bewertung], ignore_index=True)
 
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 7 von 8 -- Übertrage Dataframe-Ergebnisse in fsk_bodenschaetzung...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Übertrage Dataframe-Ergebnisse in fsk_bodenschaetzung", 7, 8)
+
         _write_sfl_to_gdb_boden(workspace, df_main, df_mini)
 
         return True
@@ -409,18 +405,26 @@ def _write_sfl_to_gdb_boden(workspace, df_main, df_mini):
     try:
         # Batch Update für Main Features
         oid_to_values = dict(zip(df_main["objectid"], zip(df_main["sfl"], df_main["emz"])))
-        oid_to_geom = dict(zip(df_main["objectid"], df_main["geometry"]))
+        df_with_geom = df_main[df_main["geometry"].notna()]
+        if len(df_with_geom) > 0:
+            oid_to_geom = dict(zip(df_with_geom["objectid"], df_with_geom["geometry"]))
+        else:
+            oid_to_geom = {}
+        # oid_to_geom = dict(zip(df_main["objectid"], df_main["geometry"]))
 
         fsk_bodenschaetzung_path = os.path.join(workspace, "fsk_bodenschaetzung")
 
         with arcpy.da.UpdateCursor(fsk_bodenschaetzung_path, ["OBJECTID", "sfl", "emz", "SHAPE@"]) as ucursor:
             for row in ucursor:
                 oid = row[0]
+                update = oid in oid_to_values or oid in oid_to_geom
                 if oid in oid_to_values:
                     sfl, emz = oid_to_values[oid]
                     row[1] = sfl
                     row[2] = emz
+                if oid in oid_to_geom:
                     row[3] = oid_to_geom[oid]
+                if update:
                     ucursor.updateRow(row)
 
         # Lösche Mini-Flächen
@@ -442,10 +446,7 @@ def _write_sfl_to_gdb_boden(workspace, df_main, df_mini):
 def finalize_results(gdb_path, workspace, keep_workdata):
     """Übernimmt Ergebnisse in Navigation-Tabellen mit Fieldmapping und Tabellen-Erstellung."""
     try:
-
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 8 von 8 -- Schreibe Ergebnisse in Ziel-GDB...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Schreibe Ergebnisse in Ziel-GDB", 8, 8)
 
         nav_bodensch = os.path.join(gdb_path, "fsk_x_bodenschaetzung")
         fsk_bodenschaetzung = os.path.join(workspace, "fsk_bodenschaetzung")
@@ -461,9 +462,8 @@ def finalize_results(gdb_path, workspace, keep_workdata):
             arcpy.AddMessage("- fsk_x_bodenschaetzung aktualisiert")
 
         if not keep_workdata:
-            arcpy.AddMessage("-" * 40)
-            arcpy.AddMessage("CLEANUP -- Lösche Zwischenergebnisse...")
-            arcpy.AddMessage("-" * 40)
+            add_step_message("CLEANUP -- Lösche Zwischenergebnisse")
+
             workdata = [
                 "fsk_bodenschaetzung",
                 "bodenschaetzung_dissolve",
@@ -497,6 +497,7 @@ def calculate_sfl_bodenschaetzung(
     max_shred_area,
     merge_area,
     delete_unmerged_mini,
+    delete_area,
     xy_tolerance,
 ):
     """
@@ -536,7 +537,15 @@ def calculate_sfl_bodenschaetzung(
         return False
 
     if not vectorized_calculate_sfl_boden(
-        cfg, gdb_path, workspace, max_shred_area, merge_area, flaechenformindex, delete_unmerged_mini, nutzung_dissolve
+        cfg,
+        gdb_path,
+        workspace,
+        max_shred_area,
+        merge_area,
+        flaechenformindex,
+        delete_unmerged_mini,
+        delete_area,
+        nutzung_dissolve,
     ):
         return False
 

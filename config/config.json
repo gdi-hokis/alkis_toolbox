@@ -13,6 +13,7 @@
 		"flurstueckskennzeichen": "flurstueckskennzeichen",
 		"shape": "SHAPE@",
 		"shape_area": "SHAPE@AREA",
+		"shape_length": "SHAPE@LENGTH",
 		"amtliche_flaeche": "amtliche_flaeche",
 		"objectid": "OBJECTID"
 	},

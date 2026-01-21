@@ -6,12 +6,14 @@ Generalisierte Mini-Flächen-Merge-Utilities für SFL-Berechnungen (Nutzung und 
 Unterstützt unterschiedliche Recalculation-Logiken via Typ-Parameter.
 """
 import time
+import os
 import arcpy
 import pandas as pd
 import numpy as np
+import sfl.init_dataframes as init_dfs
 
 
-def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_type="nutzung"):
+def merge_mini_geometries(df, workspace, max_shred_qm, merge_area, flaechenformindex, delete_area, calc_type="nutzung"):
     """
     Identifiziert und merged Kleinstflächen mit angrenzenden Hauptflächen.
 
@@ -34,7 +36,7 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
     """
     try:
         # Kleinstflächen-Filterung pro FSK
-        mask_mini = (df["sfl"] <= max_shred_qm) & (df["amtliche_flaeche"] > max_shred_qm)
+        mask_mini = df["sfl"] < max_shred_qm
 
         df.loc[mask_mini, "is_mini"] = True
         df.loc[~mask_mini, "is_mini"] = False
@@ -44,23 +46,44 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
         df_main = df[df["is_mini"] == False].copy()
 
         arcpy.AddMessage(f"- Identifiziert {len(df_mini)} Kleinstflächen zur Verarbeitung")
+        arcpy.AddMessage(f"- Identifiziert {len(df_mini)}  Hauptflächen zur Verarbeitung")
 
         df_mini_not_merged = pd.DataFrame()
+        df_mini_to_delete = pd.DataFrame()
 
-        # Mini-Flächen-Filterung: Nur die mergen, die WENIGER als 1 m² bei Verteilung ergeben
+        # === Flächen unter delete_area komplett löschen (ohne Merge) ===
+
+        if delete_area is not None and len(df_mini) > 0:
+            mask_delete = (
+                (df_mini["geom_area"] < delete_area)
+                & (df_mini["sfl"] <= merge_area)
+                & (df_mini["amtliche_flaeche"] > merge_area)
+            )
+            df_mini_to_delete = df_mini[mask_delete].copy()
+            df_mini = df_mini[~mask_delete].copy()
+
+            if len(df_mini_to_delete) > 0:
+                arcpy.AddMessage(f"- {len(df_mini_to_delete)} Flächen werden ohne Merge gelöscht (< {delete_area} m²)")
+
+        # Mini-Flächen-Filterung: Nur die mergen, die WENIGER als merge_area bei Verteilung ergeben
         if len(df_mini) > 0:
-            # Trennung: erhaltungswürdig (>= 1) vs. zu mergen (< 1)
-            mask_keep = df_mini["sfl"] >= merge_area
-            df_mini["perimeter"] = df_mini["geometry"].apply(lambda geom: geom.length)
+            # Trennung: erhaltungswürdig vs. zu mergen
+            mask_keep = (
+                ((df_mini["sfl"] <= merge_area) & (df_mini["amtliche_flaeche"] <= merge_area))
+                | (df_mini["amtliche_flaeche"] == df_mini["sfl"])
+                | (df_mini["amtliche_flaeche"] <= max_shred_qm)
+            )
+
+            df_mini["perimeter"] = df_mini["geom_length"]
             df_mini["form_index"] = df_mini["perimeter"] / np.sqrt(df_mini["geom_area"])
 
             # Schmale, lange Schnipsel filtern (form_index < flaechenformindex_input = sehr dünn)
-            mask_real_feature = df_mini["form_index"] < flaechenformindex
-            df_mini_keep = df_mini[(mask_keep) & (mask_real_feature)].copy()
-            df_mini_merge = df_mini[(~mask_keep) | (~mask_real_feature)].copy()
+            mask_real_feature = (df_mini["form_index"] < flaechenformindex) & (df_mini["sfl"] >= merge_area)
+            df_mini_keep = df_mini[(mask_keep) | ((~mask_keep) & (mask_real_feature))].copy()
+            df_mini_merge = df_mini[(~mask_keep) & (~mask_real_feature)].copy()
 
             arcpy.AddMessage(
-                f"- {len(df_mini_keep)} Mini-Flächen erhalten (>= {merge_area} m² und Flächenformindex <{flaechenformindex})"
+                f"- {len(df_mini_keep)} Mini-Flächen erhalten (>= {merge_area} m²,  Flächenformindex <{flaechenformindex} oder amtliche Fläche <= {max_shred_qm} m²)"
             )
             arcpy.AddMessage(
                 f"- {len(df_mini_merge)} Mini-Flächen werden gemergt (< {merge_area} m²) oder Flächenformindex >={flaechenformindex})"
@@ -72,13 +95,28 @@ def merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex, calc_
             # Merge zu verlustende Mini-Flächen mit angrenzenden Hauptflächen
             # Nach dem Merge: ungemergte werden zu Main hinzugefügt, gemergte werden aus df_mini entfernt
             if len(df_mini_merge) > 0:
-                df_main_after_merge, df_mini_to_delete, df_mini_not_merged = process_merging(
-                    df_main, df_mini_merge, calc_type=calc_type
+                if calc_type == "nutzung":
+                    feature_class = os.path.join(workspace, "nutzung_dissolve")
+                else:
+                    feature_class = os.path.join(workspace, "fsk_bodenschaetzung")
+
+                fsk_to_merge = df_mini_merge["fsk"].unique()
+                df_main_filtered = df_main[df_main["fsk"].isin(fsk_to_merge)]
+                df_main_unchanged = df_main[~df_main["fsk"].isin(fsk_to_merge)]
+
+                dataframes = [df_mini_merge, df_main_filtered]
+
+                df_mini_merge_geo, df_main_geo = init_dfs.add_geometries_from_fc(dataframes, feature_class)
+
+                df_main_after_merge, df_mini_merged, df_mini_not_merged = process_merging(
+                    df_main_geo, df_mini_merge_geo, calc_type=calc_type
                 )
-                df_main = df_main_after_merge
-                df_mini = df_mini_to_delete  # Nur die tatsächlich gemergt wurden
+                df_main = pd.concat([df_main_after_merge, df_main_unchanged], ignore_index=True)
+                df_mini = pd.concat(
+                    [df_mini_to_delete, df_mini_merged], ignore_index=True
+                )  # Nur die tatsächlich gemergt wurden
             else:
-                df_mini = pd.DataFrame()
+                df_mini = df_mini_to_delete  # Nur die tatsächlich gelöscht werden sollen
 
             # Nichts zu mergen
         return df_main, df_mini, df_mini_not_merged

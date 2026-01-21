@@ -16,7 +16,6 @@ def load_flurstuecke_to_dataframe(cfg, gdb_path):
     try:
         flst = cfg["flurstueck"]
         fsk_field = flst["flurstueckskennzeichen"]
-        shape_field = flst["shape"]
         shape_area_field = flst["shape_area"]
         afl_field = flst["amtliche_flaeche"]
 
@@ -24,18 +23,17 @@ def load_flurstuecke_to_dataframe(cfg, gdb_path):
         flurstueck = os.path.join(gdb_path, flurstueck_layer)
 
         # Daten mit Spatialindex auslesen
-        fields = [fsk_field, shape_field, shape_area_field, afl_field]
+        fields = [fsk_field, shape_area_field, afl_field]
         data = []
 
         with arcpy.da.SearchCursor(flurstueck, fields) as scursor:
             for row in scursor:
-                fsk, geom, geom_area, afl = row
+                fsk, geom_area, afl = row
                 if geom_area > 0:
                     verbesserung = float(afl) / geom_area
                     data.append(
                         {
                             "fsk": fsk,
-                            "geometry": geom,
                             "geom_area": geom_area,
                             "amtliche_flaeche": afl,
                             "verbesserung": verbesserung,
@@ -65,7 +63,7 @@ def load_nutzung_to_dataframe(cfg, nutzung_table):
             "OBJECTID",
             flst["flurstueckskennzeichen"],
             flst["amtliche_flaeche"],
-            flst["shape"],
+            flst["shape_length"],
             flst["shape_area"],
             nutz["objektart"],
             nutz["objektname"],
@@ -87,7 +85,7 @@ def load_nutzung_to_dataframe(cfg, nutzung_table):
                     oid,
                     fsk,
                     amtliche_flaeche,
-                    geom,
+                    geom_length,
                     geom_area,
                     obj_art,
                     obj_name,
@@ -107,7 +105,7 @@ def load_nutzung_to_dataframe(cfg, nutzung_table):
                         "objectid": oid,
                         "fsk": fsk,
                         "amtliche_flaeche": amtliche_flaeche,
-                        "geometry": geom,
+                        "geom_length": geom_length,
                         "geom_area": geom_area,
                         "objektart": obj_art,
                         "objektname": obj_name,
@@ -143,7 +141,7 @@ def load_bodenschaetzung_to_dataframe(cfg, workspace):
         fields = [
             "OBJECTID",
             flst["flurstueckskennzeichen"],
-            flst["shape"],
+            flst["shape_length"],
             flst["shape_area"],
             bods["bodenart_id"],
             bods["bodenart_name"],
@@ -174,7 +172,7 @@ def load_bodenschaetzung_to_dataframe(cfg, workspace):
                 (
                     oid,
                     fsk,
-                    geom,
+                    geom_length,
                     geom_area,
                     boda_id,
                     boda_name,
@@ -203,7 +201,7 @@ def load_bodenschaetzung_to_dataframe(cfg, workspace):
                     {
                         "objectid": oid,
                         "fsk": fsk,
-                        "geometry": geom,
+                        "geom_length": geom_length,
                         "geom_area": geom_area,
                         "bodenart_id": boda_id,
                         "bodenart_name": boda_name,
@@ -236,3 +234,45 @@ def load_bodenschaetzung_to_dataframe(cfg, workspace):
     except Exception as e:
         arcpy.AddError(f"Fehler beim Dataframe-Load von Bodenschätzung: {str(e)}")
         return False
+
+
+def add_geometries_from_fc(dataframes, feature_class):
+    """
+    Fügt Geometrien aus Feature Class zu mehreren DataFrames basierend auf OBJECTID hinzu.
+
+    Args:
+        dataframes: Dict mit {df_name: dataframe} oder Liste von DataFrames
+        feature_class: Pfad zur Feature Class
+
+    Returns:
+        Dict mit aktualisierten DataFrames oder Liste (je nach Input)
+    """
+    arcpy.AddMessage(f"- Füge Geometrien zu {len(dataframes)} DataFrames hinzu...")
+
+    # Alle benötigten OIDs sammeln
+    all_oids_needed = set()
+    if isinstance(dataframes, dict):
+        for df in dataframes.values():
+            all_oids_needed.update(df["objectid"].unique())
+    else:
+        for df in dataframes:
+            all_oids_needed.update(df["objectid"].unique())
+
+    # Einmal durchlesen und Geometrien cachen
+    geom_data = {}
+    with arcpy.da.SearchCursor(feature_class, ["OBJECTID", "SHAPE@"]) as cursor:
+        for oid, geom in cursor:
+            if oid in all_oids_needed:
+                geom_data[oid] = geom
+
+    arcpy.AddMessage(f"- Geladen: {len(geom_data)} Geometrien")
+
+    # Auf alle DataFrames anwenden
+    if isinstance(dataframes, dict):
+        for df_name, df in dataframes.items():
+            df["geometry"] = df["objectid"].map(geom_data)
+        return dataframes
+    else:
+        for df in dataframes:
+            df["geometry"] = df["objectid"].map(geom_data)
+        return dataframes

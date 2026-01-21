@@ -10,6 +10,7 @@ import os
 import time
 import arcpy
 import pandas as pd
+from utils import add_step_message
 from sfl.init_dataframes import (
     load_nutzung_to_dataframe,
     load_flurstuecke_to_dataframe,
@@ -25,9 +26,7 @@ def prepare_nutzung(cfg, gdb_path, workspace, xy_tolerance):
     arcpy.env.workspace = None
     arcpy.env.overwriteOutput = True
 
-    arcpy.AddMessage("-" * 40)
-    arcpy.AddMessage("Schritt 1 von 6 -- Vorbereitung der Nutzungs-Daten...")
-    arcpy.AddMessage("-" * 40)
+    add_step_message("Vorbereitung der Nutzungs-Daten", step=1, total_steps=6)
 
     try:
         nutzung_layer = cfg["alkis_layers"]["nutzung"]
@@ -91,16 +90,14 @@ def prepare_nutzung(cfg, gdb_path, workspace, xy_tolerance):
 
 
 def vectorized_calculate_sfl_nutzung(
-    cfg, gdb_path, workspace, max_shred_qm, merge_area, flaechenformindex, delete_unmerged_mini
+    cfg, gdb_path, workspace, max_shred_qm, merge_area, flaechenformindex, delete_unmerged_mini, delete_area
 ):
     """
     Vectorisierte Berechnung der SFL für alle Nutzungsflächen.
     """
 
     try:
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 2 von 6 -- Erstelle pandas-Dataframes...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Schritt 2 von 6 -- Erstelle pandas-Dataframes", step=2, total_steps=6)
         # Laden in DataFrame
         df_flurstuecke = load_flurstuecke_to_dataframe(cfg, gdb_path)
         if df_flurstuecke is False or df_flurstuecke.empty:
@@ -121,19 +118,19 @@ def vectorized_calculate_sfl_nutzung(
         df["raw_sfl"] = df["geom_area"] * df["verbesserung"]
         df["sfl"] = (df["raw_sfl"] + 0.5).astype(int)  # round-half-up
 
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 3 von 6 -- Vereinige Kleinstflächen geometrisch mit Nachbarn (im Dataframe)...")
-        arcpy.AddMessage("-" * 40)
-        df_main, df_mini, df_not_merged = merge_mini_geometries(df, max_shred_qm, merge_area, flaechenformindex)
+        add_step_message(
+            "Schritt 3 von 6 -- Vereinige Kleinstflächen geometrisch mit Nachbarn (im Dataframe)", step=3, total_steps=6
+        )
+
+        df_main, df_mini, df_not_merged = merge_mini_geometries(
+            df, workspace, max_shred_qm, merge_area, flaechenformindex, delete_area
+        )
         if delete_unmerged_mini:
             df_mini = pd.concat([df_mini, df_not_merged], ignore_index=True)
             arcpy.AddMessage(
                 f"- {len(df_not_merged)} Kleinstflächen, die nicht gemerged wurden, werden am Ende zusätzlich gelöscht..."
             )
-
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 4 von 6 -- Verteile die Delta-Flächen...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Schritt 4 von 6 -- Verteile die Delta-Flächen", step=4, total_steps=6)
         # Overlap-Handling: weitere_nutzung_id == 1000
         overlap_mask = df_main["weitere_nutzung_id"] == 1000
         df_main.loc[overlap_mask, "sfl"] = (df_main.loc[overlap_mask, "geom_area"]).astype(int)
@@ -143,9 +140,7 @@ def vectorized_calculate_sfl_nutzung(
         df_main = _apply_delta_correction_nutzung(df_main, max_shred_qm)
 
         # Zurückschreiben in GDB
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 5 von 6 -- Übertrage Dataframe-Ergebnisse in nutzung_dissolve...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Schritt 5 von 6 -- Übertrage Dataframe-Ergebnisse in nutzung_dissolve", step=5, total_steps=6)
         _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini)
         return True
 
@@ -257,16 +252,23 @@ def _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini):
     try:
         # Batch Update für Main Features
         oid_to_sfl = dict(zip(df_main["objectid"], df_main["sfl"]))
-        oid_to_geom = dict(zip(df_main["objectid"], df_main["geometry"]))
+        df_with_geom = df_main[df_main["geometry"].notna()]
+        if len(df_with_geom) > 0:
+            oid_to_geom = dict(zip(df_with_geom["objectid"], df_with_geom["geometry"]))
+        else:
+            oid_to_geom = {}
 
         nutzung_dissolve_path = os.path.join(workspace, "nutzung_dissolve")
 
         with arcpy.da.UpdateCursor(nutzung_dissolve_path, ["OBJECTID", "sfl", "SHAPE@"]) as ucursor:
             for row in ucursor:
                 oid = row[0]
+                update = oid in oid_to_sfl or oid in oid_to_geom
                 if oid in oid_to_sfl:
                     row[1] = oid_to_sfl[oid]
+                if oid in oid_to_geom:
                     row[2] = oid_to_geom[oid]
+                if update:
                     ucursor.updateRow(row)
 
         # Lösche Mini-Flächen
@@ -288,9 +290,7 @@ def _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini):
 def finalize_results(cfg, gdb_path, workspace, keep_workdata):
     """Übernimmt Ergebnisse in Navigation-Tabellen mit Fieldmapping und Tabellen-Erstellung."""
     # Zurückschreiben in GDB
-    arcpy.AddMessage("-" * 40)
-    arcpy.AddMessage("Schritt 6 von 6 -- Schreibe Ergebnisse in Ziel-GDB...")
-    arcpy.AddMessage("-" * 40)
+    add_step_message("Schreibe Ergebnisse in Ziel-GDB", step=6, total_steps=6)
 
     try:
         nav_nutzung = os.path.join(gdb_path, "fsk_x_nutzung")
@@ -339,9 +339,7 @@ def finalize_results(cfg, gdb_path, workspace, keep_workdata):
             arcpy.AddMessage("- fsk_x_nutzung aktualisiert")
 
         if not keep_workdata:
-            arcpy.AddMessage("-" * 40)
-            arcpy.AddMessage("CLEANUP -- Lösche Zwischenergebnisse...")
-            arcpy.AddMessage("-" * 40)
+            add_step_message("CLEANUP -- Lösche Zwischenergebnisse")
             arcpy.Delete_management(os.path.join(workspace, "nutzung_intersect"))
             arcpy.Delete_management(nutzung_dissolve)
 
@@ -361,6 +359,7 @@ def calculate_sfl_nutzung(
     max_shred_area,
     merge_area,
     delete_unmerged_mini,
+    delete_area,
     xy_tolerance,
 ):
     """
@@ -375,7 +374,7 @@ def calculate_sfl_nutzung(
             return False
 
         if not vectorized_calculate_sfl_nutzung(
-            cfg, gdb_path, workspace, max_shred_area, merge_area, flaechenformindex, delete_unmerged_mini
+            cfg, gdb_path, workspace, max_shred_area, merge_area, flaechenformindex, delete_unmerged_mini, delete_area
         ):
             return False
 
