@@ -43,7 +43,7 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl, perform_field_calculations]
+        self.tools = [wfs_download, calc_lage_tool, calc_sfl, calc_flurnummer_id, calc_locator_place]
 
 
 class calc_lage_tool:
@@ -378,51 +378,52 @@ class wfs_download:
         return
 
 
-class perform_field_calculations:
+class calc_flurnummer_id:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Feldberechnungen durchführen"
+        self.label = "Flurnummer-ID für Flurstücke berechnen"
         self.description = "Führt verschiedene Feldberechnungen auf ALKIS-Daten durch (FLSTKEY, Lagebeschriftung Bodenschätzung)"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
-
         param0 = arcpy.Parameter(
-            displayName="Feature Class",
-            name="in_featureset",
+            displayName="Feature Class der Flurstücke",
+            name="in_flst",
             datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input",
         )
         param0.filter.list = ["Polygon"]
 
-        param1 = arcpy.Parameter(
-            displayName="Ziel-Geodatabase wählen",
-            name="target_geodatabase",
-            datatype="DEWorkspace",
+        params = [param0]
+        return params
+
+    def execute(self, parameters, _messages):
+        import wfs.field_calculations
+        # flur_layer = parameters[0].value
+        flst_layer = parameters[0].value
+
+        wfs.field_calculations.calculate_flurnummer_l(flst_layer)
+
+
+class calc_locator_place:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Locator Place für Flurstücke berechnen"
+        self.description = "Berechnet den Locator Place für ALKIS-Daten"
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Feature Class der Flurstücke",
+            name="in_flst",
+            datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input",
         )
-
-        params = [param0, param1]
+        param0.filter.list = ["Polygon"]
+        params = [param0]
         return params
-
-    def isLicensed(self):
-        """Set whether the tool is licensed to execute."""
-        return True
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal
-        validation is performed."""
-        return
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool
-        parameter."""
-        return
     def execute(self, parameters, _messages):
         import wfs.field_calculations
-        importlib.reload(wfs.field_calculations)
-
-        input_layer = parameters[0].value
-        target_gdb = parameters[1].valueAsText
-        
-        wfs.field_calculations.alkis_calc(input_layer, target_gdb)
+        flst_layer = parameters[0].value
+        wfs.field_calculations.calculate_locator_place(flst_layer)

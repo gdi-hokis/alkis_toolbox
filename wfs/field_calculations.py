@@ -25,7 +25,7 @@ Enthält Funktionen für Berechnungen auf v_al_flurstueck, v_al_bodenschaetzung_
 import os
 import arcpy
 
-def alkis_calc(input_layer, gdb):
+def alkis_calc(input_layer):
     """
     Führt spezifische Feldberechnungen für die heruntergeladenen Layer durch.
     Behandelt:
@@ -83,21 +83,17 @@ def alkis_calc(input_layer, gdb):
         arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")
 
 
-def calculate_flurnummer_l(flur_fc, flurstueck_fc):
+def calculate_flurnummer_l(flurstueck_fc):
     """
     Berechnet die Flurnummer-ID (flurnummer_l) aus Gemarkung und Flurnummer.
     Format: "080" + gemarkung_id + "00" + flurnummer
 
-    :param flur_fc: Feature Class der Fluren (v_al_flur)
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
-        arcpy.AddMessage("- Flurnummer-ID für Fluren berechnen...")
-        arcpy.CalculateField_management(
-            flur_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
-        )
-
-        arcpy.AddMessage("- Flurnummer-ID für Flurstücke berechnen...")
+        arcpy.AddMessage("-"*40)
+        arcpy.AddMessage("Schritt 1 von 1 -- Flurnummer-ID für Flurstücke berechnen ...")
+        arcpy.AddMessage("-"*40)
         arcpy.CalculateField_management(
             flurstueck_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
         )
@@ -132,6 +128,24 @@ def calculate_locator_place(flurstueck_fc):
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
+        # Prüfe ob erforderliche Felder vorhanden sind
+        existing_fields = [f.name for f in arcpy.ListFields(flurstueck_fc)]
+        
+        if "flurname" not in existing_fields:
+            # Prüfe ob flurnummer_l für Join vorhanden ist
+            if "flurnummer_l" not in existing_fields:
+                arcpy.AddMessage("- Feld 'flurnummer_l' fehlt, berechne es zuerst...")
+                calculate_flurnummer_l(flurstueck_fc)
+            
+            arcpy.AddWarning(
+                "Feld 'flurname' fehlt. Führe join_flurnamen() mit der Flur-FC aus, "
+                "um das Feld zu übernehmen. Verwende stattdessen 'gemarkung_name'."
+            )
+        
+        if "gemarkung_name" not in existing_fields:
+            arcpy.AddError("Erforderliches Feld 'gemarkung_name' fehlt.")
+            return False
+
         arcpy.AddMessage("- Feld Locator-Place für Flurstücke berechnen...")
         arcpy.CalculateField_management(
             flurstueck_fc,
