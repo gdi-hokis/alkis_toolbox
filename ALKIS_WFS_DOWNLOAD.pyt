@@ -244,8 +244,8 @@ class wfs_download:
             direction="Input",
             multiValue=True,
         )
-
         param1.filter.type = "ValueList"
+
         param2 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
             name="target_geodatabase",
@@ -253,6 +253,7 @@ class wfs_download:
             parameterType="Required",
             direction="Input",
         )
+        param2.filter.list = ["File Geodatabase"]
 
         param3 = arcpy.Parameter(
             displayName="Geodatabase für temporäre Arbeitsdaten",
@@ -261,6 +262,7 @@ class wfs_download:
             parameterType="Required",
             direction="Input",
         )
+        param3.filter.list = ["File Geodatabase"]
 
         param4 = arcpy.Parameter(
             displayName="Speicherordner für JSON Download",
@@ -348,15 +350,6 @@ class wfs_download:
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
         parameter. This method is called after internal validation."""
-        gdbs = [parameters[2], parameters[3]]
-
-        # Prüfen ob Geodatabase ausgewählt wurde (bei Datentyp "DEWorkspace" theoretisch Auswahl eines Ordners möglich)
-        for gdb in gdbs:
-            if gdb.value:
-                workspace_path = gdb.valueAsText
-                # Prüfen, ob der Pfad nicht auf ".gdb" endet
-                if not workspace_path.lower().endswith(".gdb"):
-                    gdb.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
         return
 
     def execute(self, parameters, _messages):
