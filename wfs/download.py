@@ -1,9 +1,9 @@
-import arcpy
 import os
 import json
 import time
-import requests
 from datetime import datetime
+import arcpy
+import requests
 
 def wfs_download(polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir, checkbox, cell_size, timeout, verify, cfg):
     if timeout == 0:
@@ -33,7 +33,17 @@ def wfs_download(polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir
     arcpy.AddMessage("-"*40)
     arcpy.AddMessage(f"Schritt 2 von {i} -- WFS-Daten herunterladen ...")
     arcpy.AddMessage("-"*40)
-    process_data, process_fc = download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc)
+    process_data, process_fc = download_wfs(
+        grid,
+        layer_list,
+        target_gdb,
+        workspace_gdb,
+        work_dir,
+        req_settings,
+        polygon_fc,
+        cfg,
+        process_fc
+    )
 
     # Schritt 3: Verarbeitungsdaten wieder entfernen
     if checkbox is False:
@@ -79,10 +89,7 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
     bbox_name = fc_name + "_bbox"
     bbox_fc = os.path.join(gdb, bbox_name)
 
-    # bei Nichtanhaken Löschen der temporären Daten
-    process_fc.append(bbox_name)
-
-    arcpy.management.MinimumBoundingGeometry(
+    arcpy.MinimumBoundingGeometry_management(
         in_features=polygon_fc,
         out_feature_class=bbox_fc,
         geometry_type="ENVELOPE",
@@ -92,11 +99,11 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
     )
 
     desc = arcpy.Describe(bbox_fc)
-    extent = desc.extent
-    polygon_extent = arcpy.Extent(extent.lowerLeft.X, extent.lowerLeft.Y, extent.upperRight.X, extent.upperRight.Y)
+    ext = desc.extent
+    polygon_ext = arcpy.Extent(ext.lowerLeft.X, ext.lowerLeft.Y, ext.upperRight.X, ext.upperRight.Y)
 
     # Extent-Koordinaten des Eingabe-Polygons
-    min_x, min_y, max_x, max_y = extent.lowerLeft.X, extent.lowerLeft.Y, extent.upperRight.X, extent.upperRight.Y
+    min_x, min_y, max_x, max_y = ext.lowerLeft.X, ext.lowerLeft.Y, ext.upperRight.X, ext.upperRight.Y
     edge_x = max_x - min_x  # Kantenlängen
     edge_y = max_y - min_y
 
@@ -157,11 +164,13 @@ def create_grid_from_polygon(polygon_fc, gdb, cell_size, process_fc):
 
                 # Füge die Zelle nur hinzu, wenn sie das Input-Polygon schneidet
                 # if square.overlaps(polygon_geom) or square.within(polygon_geom) or polygon_geom.contains(square):
-                if not square.disjoint(polygon_extent):
+                if not square.disjoint(polygon_ext):
                     insert_cursor.insertRow([square])
                     # Extents-String für das aktuelle Rechteck
                     bboxes.append(f"{x1},{y1},{x2},{y2}")
 
+    # bei Nichtanhaken Löschen der temporären Daten
+    process_fc.append(bbox_fc)
     return bboxes
 
 def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc):
@@ -179,9 +188,10 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
     """
 
     process_data = []
-
-    # Bounding Boxen
     arcpy.env.overwriteOutput = True
+    
+    # Spatial Reference für Template-Feature-Classes
+    spatial_ref = arcpy.Describe(polygon_fc).spatialReference
 
     list_lenght = len(layer_list)
     i = 1
@@ -189,65 +199,81 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
     # Layer downloaden
     for layer in layer_list:
         arcpy.AddMessage(f"Layer {i}/{list_lenght}: {layer}...")
-        wildcards = []
+
+        # Template-FC Dictionary für diesen Layer (wird beim ersten Download erstellt)
+        template_fcs = None
+        v_al_layer = layer.replace(":", "_")
+
+        # Dictionary zum Sammeln aller temp FCs pro Geometrietyp
+        all_temp_fcs = {}
 
         for index, bbox in enumerate(grid):
-            layer_files, process_data, process_fc = downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, process_fc, workspace_gdb)
+            json_file = downloadJson(bbox,
+                layer,
+                work_dir,
+                index,
+                req_settings,
+                cfg,
+                process_data,
+                v_al_layer
+            )
+            if json_file is None:
+                continue
 
-            if layer_files:
-                # für Filtern der Merge Feature Klassen und Benennung
-                for layer_file in layer_files:
-                    wildcard = "*" + layer_file + "_*"
-                    if not wildcard in wildcards:
-                        wildcards.append(wildcard)
+            # Beim ersten erfolgreichen Download: Template-Feature-Class erstellen
+            if template_fcs is None:
+                arcpy.AddMessage("- Erstelle Template Feature Class...")
+                template_fcs = create_template_fc(json_file, v_al_layer, target_gdb, spatial_ref)
 
-        # Merge pro Geometrietyp durchführen
-        arcpy.env.workspace = workspace_gdb
-        for wildcard in wildcards:
-            fc = arcpy.ListFeatureClasses(wildcard)
-            # Extrahiere den Ausgabename ohne Geometrietyp bei gleichen Typen
-            parts = wildcard.rsplit("_", 2)
-            output_fc = parts[0][1:]
-            # Mit Geometrietyp
-            if len(wildcards) > 1:
-                output_fc = wildcard[1:-2]
+                if not template_fcs:
+                    arcpy.AddWarning(f"- Konnte kein Template für {layer} erstellen")
+                    break
 
-            output_fc_path = os.path.join(workspace_gdb, output_fc)
-            arcpy.Merge_management(fc, output_fc_path)
+            # Temp FCs erstellen und sammeln (noch nicht appenden!)
+            temp_fcs = prepare_for_merge(json_file, template_fcs, spatial_ref, workspace_gdb, target_gdb, v_al_layer)
 
-            # Alle Felder auflisten
-            fields = arcpy.ListFields(output_fc_path)
-            field_names = [field.name for field in fields]
+            # Temp FCs nach Geometrietyp sammeln
+            for geom_type, fc_list in temp_fcs.items():
+                if geom_type not in all_temp_fcs:
+                    all_temp_fcs[geom_type] = []
+                all_temp_fcs[geom_type].extend(fc_list)
 
-            identify_fields = ["Shape"]
-            for identity_field in cfg["wfs_config"]["identify_fields"]:
-                if identity_field in field_names:
-                    identify_fields.append(identity_field)
+        # Nach allen Downloads: Temp FCs per Merge ins Template einfügen
+        if template_fcs and all_temp_fcs:
+            arcpy.AddMessage("- Füge alle vorbereiteten Features zusammen...")
 
-            param = ";".join(identify_fields)
-            arcpy.DeleteIdentical_management(output_fc_path, "{0}".format(param))
+            for geom_type, temp_fc_list in all_temp_fcs.items():
+                if geom_type in template_fcs:
+                    template_fc = template_fcs[geom_type]
+                    total_features = sum(int(arcpy.GetCount_management(fc)[0]) for fc in temp_fc_list)
 
-            arcpy.AddField_management(in_table=output_fc_path, field_name="Abrufdatum", field_type="DATE")
+                    arcpy.AddMessage(f"- Merge von {len(temp_fc_list)} temporären FCs mit insgesamt {total_features} Features...")
 
-            shorten_string_fields(output_fc_path, fields)
+                    # Merge statt einzelner Appends!
+                    arcpy.Merge_management(temp_fc_list, template_fc)
 
-            output_fc_2D = output_fc + "_tmp"
-            arcpy.env.outputZFlag = "Disabled"
-            arcpy.env.outputMFlag = "Disabled"
+                    process_fc.extend(temp_fc_list)
 
-            arcpy.AddMessage("- 2D-Konvertierung...")
-            arcpy.FeatureClassToFeatureClass_conversion(in_features=output_fc_path, out_path=target_gdb, out_name=output_fc_2D)
+        # Duplikate entfernen und Geometrien außerhalb des Eingabepolygons löschen
+        if template_fcs:
+            for geom_type, fc_path in template_fcs.items():
+                # Duplikate entfernen
+                fields = arcpy.ListFields(fc_path)
+                field_names = [field.name for field in fields]
 
-            arcpy.Delete_management(output_fc_path)
-            
-            # Ab hier in target_gdb arbeiten
-            arcpy.AddMessage("- Z-Werte entfernen...")
-            output_fc_final = os.path.join(target_gdb, output_fc_2D)
-            output_fc_target = os.path.join(target_gdb, output_fc)
-            arcpy.Rename_management(output_fc_final, output_fc_target)
+                identify_fields = ["Shape"]
+                for identity_field in cfg["wfs_config"]["identify_fields"]:
+                    if identity_field in field_names:
+                        identify_fields.append(identity_field)
 
-            arcpy.AddMessage("- vollständig außerhalb des Eingabepolygons liegende Geometrien entfernen...")
-            intersect(polygon_fc, output_fc_target)
+                param = ";".join(identify_fields)
+                arcpy.AddMessage("- Duplikate entfernen...")
+                arcpy.DeleteIdentical_management(fc_path, f"{param}")
+
+                # Geometrien außerhalb des Eingabepolygons entfernen
+                arcpy.AddMessage("- vollständig außerhalb des Eingabepolygons liegende Geometrien entfernen...")
+                intersect(polygon_fc, fc_path)
+
         i += 1
     return process_data, process_fc
 
@@ -280,15 +306,16 @@ def saveExtraJson(layer_name, geojson_data, geometry_type, work_dir):
     with open(work_dir + os.sep + "{0}.json".format(layer_name), "w", encoding="utf-8") as geometry_file:
         json.dump(json_data, geometry_file)
 
-def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, process_fc, workspace_gdb):
+def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, v_al_layer):
     """
-    Führt den Download eines Rechteckes durch
+    Führt den Download eines Rechteckes durch und speichert als JSON-Datei
 
     :param bbox: Bounding Box eines Rechteckes
     :param layer: zu downloadender Layer
     :param work_dir: lokal ausgewählter Ordner für die json-files
     :param index: iterieren der Dateinamen (bei mehr als einem Rechteck notwendig)
-    :param workspace_gdb: Geodatabase für Zwischenergebnisse
+    :param v_al_layer: Layer-Name mit ersetztem Doppelpunkt
+    :return: Pfad zur JSON-Datei oder None bei Fehler
     """
     url = cfg["wfs_config"]["wfs_url"]
 
@@ -302,12 +329,11 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
     # Request ausführen
     response = requests.get(url, params=params, timeout=timeout, verify=verify)
 
-    v_al_layer = layer.replace(":", "_")  # Doppelpunkt in Dateipfad unzulässig
     layer_name = v_al_layer + "_" + str(index)
 
     if not response.status_code == 200:
         arcpy.AddWarning(f"Error {response.status_code}: {response.reason} beim Downloadversuch des Layers {layer}")
-        return
+        return None
 
     # Datei speichern
     json_file = work_dir + os.sep + "{0}.json".format(layer_name)
@@ -315,41 +341,7 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
     with open(json_file, "wb") as f:
         f.write(response.content)
 
-    # verschiedene Geometrietypen im JSON finden und auftrennen, wenn nötig --> v_al_vergleichsstueck
-    layer_files = []
-    geometry_info = getDifferentGeometryTypes(json_file)
-    geometry_types = geometry_info["geometry_types"]
-    geojson_data = geometry_info["geojson_data"]
-    if len(geometry_types) > 1:
-        arcpy.AddMessage(f"- Der Layer {v_al_layer} enthält mehrere Geometrietypen: {geometry_types}. Diese werden aufgetrennt...")
-
-    for geometry_type in geometry_types:
-        layer_name_geometry = v_al_layer + "_" + geometry_type + "_" + str(index)
-        output_fc_path = os.path.join(workspace_gdb, layer_name_geometry)
-        
-        if len(geometry_types) == 1:
-            arcpy.JSONToFeatures_conversion(json_file, output_fc_path)
-            layer_files.append(layer_name_geometry.rsplit("_", 1)[0])
-
-        # in getrennte Dateien schreiben und dann erst in Feature Class konvertieren
-        elif len(geometry_types) > 1:
-            saveExtraJson(layer_name_geometry, geojson_data, geometry_type, work_dir)
-            extra_json_file = work_dir + os.sep + f"{layer_name_geometry}.json"
-            process_data.append(extra_json_file)
-
-            arcpy.JSONToFeatures_conversion(
-                work_dir + os.sep + "{0}.json".format(layer_name_geometry), output_fc_path
-            )
-            # Dateiname für später ohne Bounding Box Info (nötig, weil sonst der Zusatz Geometrietyp fehlt)
-            layer_files.append(layer_name_geometry.rsplit("_", 1)[0])
-
-            # Ursprünglich Downgeloadete Daten mit beiden FeatureTypes löschen, sonst Verwirrung
-            arcpy.Delete_management(layer_name)
-
-        # fügt Namen der erzeugten Feature Class einer Liste hinzu, zum Löschen (je nach Checkbox) der temporären Daten
-        process_fc.append(layer_name_geometry)
-
-    return layer_files, process_data, process_fc
+    return json_file
 
 def shorten_string_fields(output_fc, fields):
     arcpy.AddMessage("- String-Feldlängen kürzen...")
@@ -374,7 +366,7 @@ def shorten_string_fields(output_fc, fields):
 
             e += 1
     if fields_to_add:
-        arcpy.management.AddFields(output_fc, fields_to_add)
+        arcpy.AddFields_management(output_fc, fields_to_add)
 
     if field_mappings:
         cursor_fields = []
@@ -424,3 +416,226 @@ def intersect(polygon_fc, output_fc):
     arcpy.DeleteFeatures_management(output_lyr)
     arcpy.Delete_management(input_lyr)
     arcpy.Delete_management(output_lyr)
+
+
+def get_arcgis_geometry_type(geojson_type):
+    """
+    Konvertiert GeoJSON-Geometrietyp zu ArcGIS-Geometrietyp
+    """
+    mapping = {
+        "Point": "POINT",
+        "MultiPoint": "MULTIPOINT",
+        "LineString": "POLYLINE",
+        "MultiLineString": "POLYLINE",
+        "Polygon": "POLYGON",
+        "MultiPolygon": "POLYGON"
+    }
+    arcgis_geom_type = mapping.get(geojson_type, None)
+    if arcgis_geom_type is None:
+        arcpy.AddWarning(f"- Unbekannter Geometrietyp {geojson_type}, wird übersprungen")
+    return arcgis_geom_type
+
+def infer_field_type(value):
+    """
+    Leitet Feldtyp und -länge aus Beispielwert ab
+    """
+    if value is None:
+        return "TEXT", 255
+    elif isinstance(value, bool):
+        return "SHORT", None
+    elif isinstance(value, int):
+        return "LONG", None
+    elif isinstance(value, float):
+        return "DOUBLE", None
+    else:
+        return "TEXT", 255
+
+def create_template_fc(json_file, layer_name, target_gdb, spatial_ref, force_suffix=False):
+    """
+    Erstellt Template-Feature-Class(es) basierend auf JSON-Schema.
+    Felder werden direkt mit korrekter Länge angelegt.
+    Feature Class wird direkt in 2D erstellt.
+    
+    :param json_file: Pfad zur JSON-Datei
+    :param layer_name: Name des Layers (ohne Geometrietyp-Suffix)
+    :param target_gdb: Ziel-Geodatabase
+    :param spatial_ref: epsg-code
+    :param force_suffix: Erzwingt Geometrietyp-Suffix auch bei nur einem Geometrietyp
+    :return: Dictionary {geometry_type: feature_class_path}
+    """
+    with open(json_file, 'r', encoding='utf-8') as f:
+        geojson = json.load(f)
+
+    if not geojson['features']:
+        arcpy.AddWarning(f"- Keine Features in {json_file} gefunden")
+        return {}
+
+    # Verschiedene Geometrietypen sammeln
+    geometry_types = set()
+    properties_by_geom = {}
+
+    for feature in geojson['features']:
+        geom_type = feature['geometry']['type']
+        geometry_types.add(geom_type)
+        if geom_type not in properties_by_geom:
+            properties_by_geom[geom_type] = feature['properties']
+
+    # Benutzer informieren wenn mehrere Geometrietypen vorhanden
+    if len(geometry_types) > 1:
+        arcpy.AddMessage(f"- Der Layer {layer_name} enthält mehrere Geometrietypen: {list(geometry_types)}. Diese werden aufgetrennt...")
+
+    # Template für jeden Geometrietyp erstellen
+    template_fcs = {}
+
+    # 2D-Flags setzen
+    arcpy.env.outputZFlag = "Disabled"
+    arcpy.env.outputMFlag = "Disabled"
+
+    for geom_type in geometry_types:
+        # Feature Class Name (mit Suffix wenn mehrere Geometrietypen oder force_suffix=True)
+        if len(geometry_types) > 1 or force_suffix:
+            fc_name = f"{layer_name}_{geom_type}"
+        else:
+            fc_name = layer_name
+
+        # Feature Class erstellen
+        arcgis_geom_type = get_arcgis_geometry_type(geom_type)
+        if arcgis_geom_type is None:
+            continue
+
+        arcpy.CreateFeatureclass_management(
+            out_path=target_gdb,
+            out_name=fc_name,
+            geometry_type=arcgis_geom_type,
+            spatial_reference=spatial_ref
+        )
+
+        # Vollständiger Pfad zur gerade erstellten FC
+        template_fc = os.path.join(target_gdb, fc_name)
+
+        # Felder aus Properties ableiten und hinzufügen
+        properties = properties_by_geom[geom_type]
+        fields_to_add = []
+
+        for field_name, value in properties.items():
+            # von ArcGIS reservierte Feldnamen überspringen
+            if field_name.upper() in ['OBJECTID', 'SHAPE', 'FID', 'OID']:
+                continue
+
+            field_type, field_length = infer_field_type(value)
+
+            if field_type == "TEXT":
+                fields_to_add.append([field_name, field_type, "", "", field_length])
+            else:
+                fields_to_add.append([field_name, field_type])
+
+        # Abrufdatum hinzufügen
+        fields_to_add.append(["Abrufdatum", "DATE"])
+
+        if fields_to_add:
+            arcpy.AddFields_management(template_fc, fields_to_add)
+
+        template_fcs[geom_type] = template_fc
+        arcpy.AddMessage(f"- Template-FC erstellt: {fc_name} (Geometrietyp: {geom_type})")
+
+    return template_fcs
+
+def prepare_for_merge(json_file, template_fc_dict, spatial_ref, workspace_gdb, target_gdb, layer_name):
+    """
+    Fügt Features aus JSON-Datei in entsprechende Template-Feature-Classes ein.
+    Verwendet JSONToFeatures für korrekte Geometrie-Konvertierung.
+    Temporäre FCs werden gesammelt und später per Merge eingefügt.
+    Erstellt fehlende Templates dynamisch, wenn neue Geometrietypen auftauchen.
+    
+    :param json_file: Pfad zur JSON-Datei
+    :param template_fc_dict: Dictionary {geometry_type: feature_class_path}
+    :param spatial_ref: Spatial Reference für Geometrien
+    :param workspace_gdb: Arbeitsdatenbank für temporäre FC
+    :param target_gdb: Ziel-Geodatabase für neue Templates
+    :param layer_name: Name des Layers für neue Templates
+    :return: Dictionary {geometry_type: [temp_fc_paths]} für späteres Mergen
+    """
+    with open(json_file, 'r', encoding='utf-8') as f:
+        geojson = json.load(f)
+
+    features = geojson.get('features', [])
+
+    if not features:
+        return {}
+
+    # Features nach Geometrietyp gruppieren
+    features_by_geom = {}
+    for feature in features:
+        geom_type = feature['geometry']['type']
+        if geom_type not in features_by_geom:
+            features_by_geom[geom_type] = []
+        features_by_geom[geom_type].append(feature)
+
+    # Dictionary zum Sammeln der temp FCs pro Geometrietyp
+    temp_fcs_by_geom = {}
+
+    # Für jeden Geometrietyp temporäre FC erstellen
+    for geom_type, features in features_by_geom.items():
+        # Fehlendes Template dynamisch erstellen wenn neuer Geometrietyp auftaucht
+        if geom_type not in template_fc_dict:
+            arcpy.AddMessage(f"- Neuer Geometrietyp {geom_type} gefunden, erstelle zusätzliches Template...")
+
+            # Temporäre JSON mit Features dieses Geometrietyps erstellen
+            temp_json_for_template = {
+                "type": "FeatureCollection",
+                "features": features,
+                "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::25832"}}
+            }
+            temp_json_path = os.path.join(os.path.dirname(json_file), f"template_{geom_type}_{os.path.basename(json_file)}")
+            with open(temp_json_path, 'w', encoding='utf-8') as f:
+                json.dump(temp_json_for_template, f)
+
+            # Template über bestehende Funktion erstellen (force_suffix=True da bereits anderer Geometrietyp existiert)
+            new_templates = create_template_fc(temp_json_path, layer_name, target_gdb, spatial_ref, force_suffix=True)
+
+            # Neue Templates zum Dictionary hinzufügen
+            template_fc_dict.update(new_templates)
+
+            # Temporäre JSON löschen
+            os.remove(temp_json_path)
+
+        # temp GeoJSON für diesen Geometrietyp erstellen (JSONToFeatures kann nur mit einem Geometrietyp umgehen)
+        temp_json = {
+            "type": "FeatureCollection",
+            "features": features,
+            "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::25832"}}
+        }
+
+        temp_json_file = os.path.join(os.path.dirname(json_file), f"temp_{geom_type}_{os.path.basename(json_file)}")
+        with open(temp_json_file, 'w', encoding='utf-8') as f:
+            json.dump(temp_json, f)
+
+        # Temporäre FC aus JSON erstellen
+        temp_fc_name = f"temp_{geom_type}_{int(time.time() * 1000)}" # Millisekunden für Eindeutigkeit
+        temp_fc = os.path.join(workspace_gdb, temp_fc_name)
+
+        try:
+            arcpy.AddMessage(f"- Bereite {len(features)} Features aus {os.path.basename(json_file)} vor...")
+            arcpy.JSONToFeatures_conversion(temp_json_file, temp_fc)
+
+            # Abrufdatum-Feld hinzufügen und setzen
+            arcpy.AddField_management(temp_fc, "Abrufdatum", "DATE")
+            with arcpy.da.UpdateCursor(temp_fc, ["Abrufdatum"]) as cursor:
+                for row in cursor:
+                    row[0] = datetime.now()
+                    cursor.updateRow(row)
+
+            # Temp FC zur Liste hinzufügen statt sofort zu appenden
+            if geom_type not in temp_fcs_by_geom:
+                temp_fcs_by_geom[geom_type] = []
+            temp_fcs_by_geom[geom_type].append(temp_fc)
+
+            # Temporäre JSON-Datei löschen
+            os.remove(temp_json_file)
+
+        except Exception as e:
+            arcpy.AddWarning(f"- Fehler beim Vorbereiten: {str(e)}")
+            if os.path.exists(temp_json_file):
+                os.remove(temp_json_file)
+
+    return temp_fcs_by_geom
