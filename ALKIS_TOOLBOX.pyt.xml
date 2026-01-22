@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<metadata xml:lang="de"><Esri><CreaDate>20250401</CreaDate><CreaTime>10185200</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce><ModDate>20260122</ModDate><ModTime>142917</ModTime><scaleRange><minScale>150000000</minScale><maxScale>5000</maxScale></scaleRange><ArcGISProfile>ItemDescription</ArcGISProfile></Esri><toolbox name="ALKIS_TOOLBOX" alias="ALKISWFSDownload"><arcToolboxHelpPath>c:\program files\arcgis\pro\Resources\Help\gp</arcToolboxHelpPath><toolsets/></toolbox><dataIdInfo><idCitation><resTitle>ALKIS_TOOLBOX</resTitle></idCitation><idPurp>In dieser Toolbox werden diverse Werkzeuge in Zusammenhang dem Download und der Aufbereitung von ALKIS-Daten für eine Nutzung bereitgestellt.
+- Download der Daten eines Eingabebereichs aus dem ALKIS-WFS des LGL BW
+- Konvertierung der Eigentümertabelle des LGL in ein mit den Flurstücken verknüpfbares Format
+- Verschnitt Flurstück und Lagebezeichnung für Zuordnung pro Flurstück
+- Verschnitt Flurstück und Nutzung (Schnittflächenabgleich mit der amtlichen Fläche)
+- Verschnitt Flurstück und Bodenschätzung/ Bewertung ausgehend von der Nutzung ( (Schnittflächenabgleich mit der amtlichen Fläche, EMZ-Berechnung)
+- Extraktion von Veränderungsnummern der Flurstücke und Gebäude aus NAS-Dateien
+- Feldberechnungen zu verschiedenen Layern:
+   Flurstücke: Flurnamen
+   Flurstücke: Ortsnamen (Flur- oder Gemeindenamen für Locator)
+   Flurstücke: FSK (ohne Folge)
+   Flurstücke: Flstkey (Schreibweise ohne Nullen)
+   Bodenschätzung: Beschriftung
+   
+</idPurp><searchKeys><keyword>ALKIS_TOOLBOX</keyword><keyword>Toolbox</keyword><keyword>ALKIS</keyword><keyword>NAS</keyword><keyword>Veränderungsnummer</keyword><keyword>WFS</keyword><keyword>Download</keyword><keyword>Layer</keyword><keyword>Flurstücke</keyword><keyword>Gebäude</keyword><keyword>Lagebezeichnung</keyword><keyword>Straße</keyword><keyword>Hausnummer</keyword><keyword>Beschriftung</keyword><keyword>Bodenschätzung</keyword><keyword>Verwaltungsgrenze</keyword><keyword>Nutzung</keyword><keyword>Tatsächliche Nutzung</keyword><keyword>EMZ</keyword><keyword>Ertragsmesszahl</keyword><keyword>Schnittfläche</keyword><keyword>Berechnung</keyword><keyword>FSK</keyword><keyword>Feldberechnung</keyword></searchKeys></dataIdInfo><distInfo><distributor><distorFormat><formatName>ArcToolbox Toolbox</formatName></distorFormat></distributor></distInfo><mdHrLv><ScopeCd value="005"/></mdHrLv><mdDateSt Sync="TRUE">20260122</mdDateSt></metadata>

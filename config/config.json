@@ -70,5 +70,25 @@
 	"bewertung": {
 		"klassifizierung_id": "klassifizierung_id",
 		"klassifizierung_name": "klassifizierung_name"
+	},
+
+	"nas": {
+		"namespaces": {
+			"": "http://www.adv-online.de/namespaces/adv/gid/7.1",
+			"ak": "http://www.adv-online.de/namespaces/adv/aaa-ak/2.0",
+			"gml": "http://www.opengis.net/gml/3.2",
+			"gmd": "http://www.isotc211.org/2005/gmd",
+			"gmlexr": "http://www.opengis.net/gml/3.3/exr",
+			"ows": "http://www.opengis.net/ows/1.1",
+			"wfs": "http://www.opengis.net/wfs/2.0",
+			"wfsext": "http://www.adv-online.de/namespaces/adv/gid/wfsext/2.0",
+			"fes": "http://www.opengis.net/fes/2.0",
+			"xlink": "http://www.w3.org/1999/xlink",
+			"xsi": "http://www.w3.org/2001/XMLSchema-instance",
+			"gco": "http://www.isotc211.org/2005/gco",
+			"ext": "http://www.supportgis.de/cpa",
+			"cpa": "http://www.cpa-systems.de/namespaces/adv/gid/7.1",
+			"adv": "http://www.adv-online.de/namespaces/adv/gid/7.1"
+		}
 	}
 }
