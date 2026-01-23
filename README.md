@@ -6,8 +6,8 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 
 1. Daten aus Github-Repository herunterladen und lokal speichern
 2. Im ArcGIS Pro Katalog Rechtsklick auf 'Toolboxen'->'Toolbox hinzufügen'
-3. zu heruntergeladenen Daten navigieren und die Datei 'ALKIS_WFS_DOWNLOAD.pyt' auswählen; dieses erscheint dann im ArcGIS Pro Katalog unter 'Toolboxen'
-4. 'ALIKS_WFS_DOWNLOAD.pyt' aufklappen und 'wfs_download' mit Doppelklick öffnen
+3. zu heruntergeladenen Daten navigieren und die Datei 'ALKIS_TOOLBOX.pyt' auswählen; dieses erscheint dann im ArcGIS Pro Katalog unter 'Toolboxen'
+4. 'ALIKS_TOOLBOX.pyt' aufklappen und die verschiedenen Werkzeuge mit Doppelklick öffnen
 
 ## Tools
 
@@ -96,3 +96,27 @@ relevante Nutzungsarten für Bewertung: Landwirtschaft (43001), Wald (43002), Ge
 Für Fließgewässer (44001), Stehendes Gewässer (44006) findet eine Überprüfung für die Bewertungsarten 3480, 3481, 3482 und 3490 statt.
 
 Bewertungen ohne Bodenschätzung - siehe VWVLK Anlage 1 (3100, 3105, 3200, 3411, 3480, 3481, 3482, 3490, 3510, 3520, 3530, 3600, 3610, 3611, 3612, 3613, 3614, 3615, 3616, 3710, 3999)
+
+### Veränderungsnummern aus NAS auslesen
+
+Dieses Werkzeug liest Veränderungsnummern von Flurstücken und Gebäuden aus NAS-XML-Dateien aus und erstellt zwei Verknüpfungstabellen (fsk_x_vn und geb_x_vn).
+
+**Hintergrund:**
+
+Veränderungsnummern (VN) dokumentieren Änderungen an ALKIS-Objekten und sind über den WFS nicht verfügbar. Sie sind jedoch in den NAS-Dateien als Fachdatenverbindungen (AA_Fachdatenverbindung) gespeichert.
+
+**Eingabedaten:**
+
+- NAS-XML-Dateien mit AX_Flurstueck und AX_Gebaeude Objekten
+
+**Ablauf:**
+
+1. Durchsuchen aller XML-Dateien im angegebenen NAS-Verzeichnis
+2. Extraktion der Veränderungsnummern (nur VN mit Endung 'F' oder 'V') aus den Fachdatenverbindungen
+3. Erstellung von CSV-Tabellen mit den Zuordnungen: GML-ID zu Veränderungsnummern
+4. Optional: Speicherung der Ergebnisse in einer Geodatabase als Tabellen fsk_x_vn (mit Flurstückskennzeichen) und geb_x_vn
+
+**Hinweis:**
+
+Es werden nur Veränderungsnummern mit den Endungen 'F' (Fortführungsriss) oder 'V' (Fortführungsnachweis) extrahiert. Bei mehreren Veränderungsnummern pro Objekt werden diese mit '|' getrennt gespeichert.
+Beachten Sie: Die Verknüpfung der Gebäude mit den Veränderungsnummern läuft über die GML-ID. File Geodatabases unterscheiden bei Textvergleichen nicht zwischen Groß-/Kleinschreibung, was zu Fehlverknüpfungen führen kann. Für zuverlässige Ergebnisse sollte eine Enterprise Geodatabase mit case-sensitiver Einstellung verwendet werden.

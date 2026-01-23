@@ -11,7 +11,7 @@ import math
 import time
 import pandas as pd
 import arcpy
-from utils import add_step_message
+from utils import add_step_message, progress_message
 from sfl.init_dataframes import (
     load_nutzung_to_dataframe,
     load_flurstuecke_to_dataframe,
@@ -20,7 +20,7 @@ from sfl.init_dataframes import (
 from sfl.merge_mini_geometries import merge_mini_geometries
 
 
-def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
+def prepare_boden(cfg, gdb_path, workspace, xy_tolerance):
     """
     Bereitet Bodenschätzungs-Daten vor durch Intersect und Dissolve mit Flurstücken.
 
@@ -29,7 +29,6 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
         gdb_path: Pfad zur Geodatabase
         workspace: ArcGIS Workspace-Pfad
         xy_tolerance: XY-Toleranz für geometrische Operationen
-        nutzung_dissolve: Dissolve-Pfad der vorbereiteten Nutzungsdaten
 
     Returns:
         bool: True bei Erfolg, False bei Fehler
@@ -45,6 +44,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
         bodenschaetzung = os.path.join(gdb_path, bodenschaetzung_layer)
         flurstueck = os.path.join(gdb_path, flurstueck_layer)
         bewertung = os.path.join(gdb_path, bewertung_layer)
+        nutzung_dissolve = os.path.join(gdb_path, "fsk_x_nutzung")
 
         if not all(arcpy.Exists(fc) for fc in [bodenschaetzung, flurstueck, bewertung]):
             arcpy.AddError(
@@ -219,15 +219,7 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
 
 
 def vectorized_calculate_sfl_boden(
-    cfg,
-    gdb_path,
-    workspace,
-    max_shred_qm,
-    merge_area,
-    flaechenformindex,
-    delete_unmerged_mini,
-    delete_area,
-    nutzung_dissolve,
+    cfg, gdb_path, workspace, max_shred_qm, merge_area, flaechenformindex, delete_unmerged_mini, delete_area
 ):
     """
     Führt die SFL- und EMZ-Berechnung für Bodenschätzung durch mit Pandas-Vectorisierung.
@@ -240,7 +232,6 @@ def vectorized_calculate_sfl_boden(
         merge_area: Minimale Flächengröße für Erhaltung in m²
         flaechenformindex: Maximaler Flächenformindex für Erhaltung (niedrig = kompakt)
         delete_unmerged_mini: Bool, ob nicht gemergte Mini-Flächen gelöscht werden sollen
-        nutzung_dissolve: Dissolve-Pfad der vorbereiteten Nutzungsdaten
     """
 
     try:
@@ -249,7 +240,7 @@ def vectorized_calculate_sfl_boden(
         df_flurstuecke = load_flurstuecke_to_dataframe(cfg, gdb_path)
         if df_flurstuecke is False or df_flurstuecke.empty:
             return False
-        df_nutzung = load_nutzung_to_dataframe(cfg, nutzung_dissolve)
+        df_nutzung = load_nutzung_to_dataframe(cfg, gdb_path)
         if df_nutzung is False or df_nutzung.empty:
             return False
         df_bodenschaetzung = load_bodenschaetzung_to_dataframe(cfg, workspace)
@@ -299,11 +290,11 @@ def vectorized_calculate_sfl_boden(
 
         add_step_message("Vereinige Kleinstflächen geometrisch mit Nachbarn", 4, 8)
 
-        df_main, df_mini, df_not_merged = merge_mini_geometries(
+        df_main, df_delete, df_not_merged = merge_mini_geometries(
             df, workspace, max_shred_qm, merge_area, flaechenformindex, delete_area, "bodenschaetzung"
         )
         if delete_unmerged_mini:
-            df_mini = pd.concat([df_mini, df_not_merged], ignore_index=True)
+            df_delete = pd.concat([df_delete, df_not_merged], ignore_index=True)
             arcpy.AddMessage(
                 f"- {len(df_not_merged)} Kleinstflächen, die nicht gemerged wurden, werden am Ende zusätzlich gelöscht..."
             )
@@ -325,7 +316,7 @@ def vectorized_calculate_sfl_boden(
 
         add_step_message("Übertrage Dataframe-Ergebnisse in fsk_bodenschaetzung", 7, 8)
 
-        _write_sfl_to_gdb_boden(workspace, df_main, df_mini)
+        _write_sfl_to_gdb_boden(workspace, df_main, df_delete)
 
         return True
 
@@ -346,9 +337,7 @@ def _apply_delta_correction_boden(df, max_shred_qm):
         processed_groups += 1
 
         # Progress alle 50k Gruppen (oder am Ende)
-        if not processed_groups % 50000 or processed_groups == total_groups:
-            elapsed = time.time() - start_time
-            arcpy.AddMessage(f"- Fortschritt: {processed_groups}/{total_groups} FSKs ({elapsed:.1f}s)")
+        progress_message(50000, processed_groups, total_groups, start_time)
 
         schaetz_afl = fsk_data["schaetz_afl"].iloc[0]
 
@@ -398,7 +387,7 @@ def _apply_delta_correction_boden(df, max_shred_qm):
     return df
 
 
-def _write_sfl_to_gdb_boden(workspace, df_main, df_mini):
+def _write_sfl_to_gdb_boden(workspace, df_main, df_delete):
     """
     Schreibe SFL und EMZ Werte zurück in GDB.Lösche auch Kleinstflächen-Zeilen.
     """
@@ -428,15 +417,17 @@ def _write_sfl_to_gdb_boden(workspace, df_main, df_mini):
                     ucursor.updateRow(row)
 
         # Lösche Mini-Flächen
-        if len(df_mini) > 0:
-            mini_oids = df_mini["objectid"].tolist()
+        if len(df_delete) > 0:
+            mini_oids = df_delete["objectid"].tolist()
             oid_str = ",".join(map(str, mini_oids))
 
             with arcpy.da.UpdateCursor(fsk_bodenschaetzung_path, ["OBJECTID"], f"OBJECTID IN ({oid_str})") as ucursor:
                 for row in ucursor:
                     ucursor.deleteRow()
 
-        arcpy.AddMessage(f"- {len(df_main)} Features aktualisiert, {len(df_mini)} Kleinstflächen gelöscht")
+        arcpy.AddMessage(
+            f"- {len(df_main)} Features aktualisiert, davon {len(df_with_geom)} mit Geometrie, {len(df_delete)} Kleinstflächen gelöscht"
+        )
 
     except Exception as e:
         arcpy.AddError(f"Fehler beim Schreiben (Boden): {str(e)}")
@@ -525,15 +516,7 @@ def calculate_sfl_bodenschaetzung(
     arcpy.env.workspace = workspace
     arcpy.env.overwriteOutput = True
 
-    if arcpy.Exists("nutzung_dissolve"):
-        nutzung_dissolve = "nutzung_dissolve"
-    elif arcpy.Exists(os.path.join(gdb_path, "fsk_x_nutzung")):
-        nutzung_dissolve = os.path.join(gdb_path, "fsk_x_nutzung")
-    else:
-        arcpy.AddError("Weder nutzung_dissolve noch fsk_x_nutzung gefunden")
-        return False
-
-    if not prepare_boden(cfg, gdb_path, workspace, xy_tolerance, nutzung_dissolve):
+    if not prepare_boden(cfg, gdb_path, workspace, xy_tolerance):
         return False
 
     if not vectorized_calculate_sfl_boden(
@@ -545,7 +528,6 @@ def calculate_sfl_bodenschaetzung(
         flaechenformindex,
         delete_unmerged_mini,
         delete_area,
-        nutzung_dissolve,
     ):
         return False
 

@@ -49,7 +49,7 @@ def load_flurstuecke_to_dataframe(cfg, gdb_path):
         return False
 
 
-def load_nutzung_to_dataframe(cfg, nutzung_table):
+def load_nutzung_to_dataframe(cfg, gdb_path, feature_class_name="fsk_x_nutzung"):
     """
     Lädt alle Nutzung Features in DataFrame nach Prepare-Phase.
     """
@@ -79,7 +79,7 @@ def load_nutzung_to_dataframe(cfg, nutzung_table):
         ]
         data = []
 
-        with arcpy.da.SearchCursor(nutzung_table, fields) as scursor:
+        with arcpy.da.SearchCursor(os.path.join(gdb_path, feature_class_name), fields) as scursor:
             for row in scursor:
                 (
                     oid,

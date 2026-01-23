@@ -111,7 +111,7 @@ def calculate_fsk(flurstueck_fc):
           fsk = fsk[:6] + "___" + fsk[9:]
       if fsk[14:18] == "0000":
           fsk = fsk[:14] + "____" + fsk[18:]
-      return fsk""",
+      return fsk[:-2]""",
             "TEXT",
         )
         arcpy.AddMessage("FSK-Kurzform berechnet")

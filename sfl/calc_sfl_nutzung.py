@@ -10,7 +10,7 @@ import os
 import time
 import arcpy
 import pandas as pd
-from utils import add_step_message
+from utils import add_step_message, progress_message
 from sfl.init_dataframes import (
     load_nutzung_to_dataframe,
     load_flurstuecke_to_dataframe,
@@ -103,7 +103,7 @@ def vectorized_calculate_sfl_nutzung(
         if df_flurstuecke is False or df_flurstuecke.empty:
             return False
 
-        df_nutzung = load_nutzung_to_dataframe(cfg, os.path.join(workspace, "nutzung_dissolve"))
+        df_nutzung = load_nutzung_to_dataframe(cfg, workspace, "nutzung_dissolve")
         if df_nutzung is False or df_nutzung.empty:
             return False
 
@@ -122,11 +122,11 @@ def vectorized_calculate_sfl_nutzung(
             "Schritt 3 von 6 -- Vereinige Kleinstflächen geometrisch mit Nachbarn (im Dataframe)", step=3, total_steps=6
         )
 
-        df_main, df_mini, df_not_merged = merge_mini_geometries(
+        df_main, df_delete, df_not_merged = merge_mini_geometries(
             df, workspace, max_shred_qm, merge_area, flaechenformindex, delete_area
         )
         if delete_unmerged_mini:
-            df_mini = pd.concat([df_mini, df_not_merged], ignore_index=True)
+            df_delete = pd.concat([df_delete, df_not_merged], ignore_index=True)
             arcpy.AddMessage(
                 f"- {len(df_not_merged)} Kleinstflächen, die nicht gemerged wurden, werden am Ende zusätzlich gelöscht..."
             )
@@ -141,7 +141,7 @@ def vectorized_calculate_sfl_nutzung(
 
         # Zurückschreiben in GDB
         add_step_message("Schritt 5 von 6 -- Übertrage Dataframe-Ergebnisse in nutzung_dissolve", step=5, total_steps=6)
-        _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini)
+        _write_sfl_to_gdb_nutzung(workspace, df_main, df_delete)
         return True
 
     except Exception as e:
@@ -164,11 +164,7 @@ def _apply_delta_correction_nutzung(df, max_shred_qm):
             processed_groups += 1
 
             # Progress alle 50k Gruppen (oder am Ende)
-            if not processed_groups % 50000 or processed_groups == total_groups:
-                elapsed = time.time() - start_time
-                arcpy.AddMessage(
-                    f"- Fortschritt: {processed_groups}/{total_groups} FSKs verarbeitet " f"({elapsed:.1f}s)"
-                )
+            progress_message(50000, processed_groups, total_groups, start_time)
 
             afl = fsk_data["amtliche_flaeche"].iloc[0]
 
@@ -243,7 +239,7 @@ def _apply_delta_correction_nutzung(df, max_shred_qm):
         return False
 
 
-def _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini):
+def _write_sfl_to_gdb_nutzung(workspace, df_main, df_delete):
     """
     Schreibe SFL-Werte in GDB zurück mit Batch UpdateCursor.
     Lösche auch Kleinstflächen-Zeilen.
@@ -272,15 +268,17 @@ def _write_sfl_to_gdb_nutzung(workspace, df_main, df_mini):
                     ucursor.updateRow(row)
 
         # Lösche Mini-Flächen
-        if len(df_mini) > 0:
-            mini_oids = df_mini["objectid"].tolist()
+        if len(df_delete) > 0:
+            mini_oids = df_delete["objectid"].tolist()
             oid_str = ",".join(map(str, mini_oids))
 
             with arcpy.da.UpdateCursor(nutzung_dissolve_path, ["OBJECTID"], f"OBJECTID IN ({oid_str})") as ucursor:
                 for row in ucursor:
                     ucursor.deleteRow()
 
-        arcpy.AddMessage(f"- {len(df_main)} Features aktualisiert, {len(df_mini)} Kleinstflächen gelöscht")
+        arcpy.AddMessage(
+            f"- {len(df_main)} Features aktualisiert, davon {len(df_with_geom)} mit Geometrie, {len(df_delete)} Kleinstflächen gelöscht"
+        )
 
     except Exception as e:
         arcpy.AddError(f"Fehler beim Schreiben: {str(e)}")

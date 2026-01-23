@@ -27,12 +27,12 @@ import importlib
 import arcpy
 import wfs_field_calculations
 
-
+import utils
 import config.config_loader
 import sfl.init_dataframes
 import sfl.merge_mini_geometries
 
-
+importlib.reload(utils)
 importlib.reload(config.config_loader)
 importlib.reload(sfl.init_dataframes)
 importlib.reload(sfl.merge_mini_geometries)
@@ -73,6 +73,7 @@ class calc_lage:
         """Define the tool (tool name is the name of the class)."""
         self.label = "Verschnitt Flurstück & Lagebezeichnung"
         self.description = "Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine fsk_x_lage Tabelle"
+        self.category = "Flurstücks-Verschnitte"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
@@ -117,15 +118,12 @@ class calc_lage:
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool parameter."""
-        gdb_param = parameters[0].valueAsText
-
-        if gdb_param:
-            gdb_path = os.path.join(gdb_param, "fsk_x_lage")
-            if arcpy.Exists(gdb_path):
-                parameters[0].setWarningMessage(
-                    "Die Feature-Class 'fsk_x_lage' existiert bereits in der Geodatabase und wird überschrieben."
-                )
-        pass
+        utils.warn_overwriting_existing_layers(parameters[0], "fsk_x_lage")
+        layers = cfg["alkis_layers"]
+        utils.check_required_layers(
+            parameters[0],
+            [layers["flurstueck"], layers["lagebezeichnung"], layers["strasse_gewann"], layers["gebaeude"]],
+        )
 
     def execute(self, parameters, _messages):
         gdb_path = parameters[0].valueAsText
@@ -154,6 +152,7 @@ class calc_sfl_bodenschaetzung:
         Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) von den Flurstücken mit der Bodenschätzung und Bodenschätzungsbewertung.
         """
         self.canRunInBackground = True
+        self.category = "Flurstücks-Verschnitte"
 
     def getParameterInfo(self):
         """Definiert die Tool-Parameter."""
@@ -251,15 +250,12 @@ class calc_sfl_bodenschaetzung:
 
     def updateMessages(self, parameters):
         """Validiere Parameter."""
-        gdb_param = parameters[0].valueAsText
-
-        if gdb_param:
-            gdb_path = os.path.join(gdb_param, "fsk_x_bodenschaetzung")
-            if arcpy.Exists(gdb_path):
-                parameters[0].setWarningMessage(
-                    "Die Feature-Class 'fsk_x_bodenschaetzung' existiert bereits in der Geodatabase und wird überschrieben."
-                )
-        pass
+        utils.warn_overwriting_existing_layers(parameters[0], "fsk_x_bodenschaetzung")
+        layers = cfg["alkis_layers"]
+        utils.check_required_layers(
+            parameters[0],
+            [layers["flurstueck"], layers["bodenschaetzung"], layers["bewertung"], "fsk_x_nutzung"],
+        )
 
     def execute(self, parameters, messages):
         """Hauptlogik des Tools."""
@@ -306,6 +302,7 @@ class calc_sfl_nutzung:
         Berechnet Schnittflächen (SFL) von den Flurstücken mit der tatsächlichen Nutzung.
         """
         self.canRunInBackground = True
+        self.category = "Flurstücks-Verschnitte"
 
     def getParameterInfo(self):
         """Definiert die Tool-Parameter."""
@@ -403,14 +400,9 @@ class calc_sfl_nutzung:
 
     def updateMessages(self, parameters):
         """Validiere Parameter."""
-        gdb_param = parameters[0].valueAsText
-
-        if gdb_param:
-            gdb_path = os.path.join(gdb_param, "fsk_x_nutzung")
-            if arcpy.Exists(gdb_path):
-                parameters[0].setWarningMessage(
-                    "Die Feature-Class 'fsk_x_nutzung' existiert bereits in der Geodatabase und wird überschrieben."
-                )
+        utils.warn_overwriting_existing_layers(parameters[0], "fsk_x_nutzung")
+        layers = cfg["alkis_layers"]
+        utils.check_required_layers(parameters[0], [layers["flurstueck"], layers["nutzung"]])
 
     def execute(self, parameters, messages):
         """Hauptlogik des Tools."""
@@ -460,6 +452,7 @@ class wfs_download:
         self.process_data = []
         self.process_fc = []
         self.url = wfs_config["wfs_url"]
+        self.category = "Download WFS-Daten"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
@@ -1064,6 +1057,7 @@ class extract_vn_from_nas:
         """Define the tool (tool name is the name of the class)."""
         self.label = "Veränderungsnummern aus NAS auslesen"
         self.description = "Liest die Veränderungsnummern von Flurstücken und Gebäuden aus den NAS-Dateien aus und speichert diese in zwei Tabellen."
+        self.category = "NAS-Verarbeitungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
@@ -1107,20 +1101,7 @@ class extract_vn_from_nas:
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool parameter."""
-        gdb_param = parameters[1].valueAsText
-
-        if gdb_param:
-            gdb_path = os.path.join(gdb_param, "fsk_x_vn")
-            message = ""
-            if arcpy.Exists(gdb_path):
-                message = "Die Tabelle 'fsk_x_vn' existiert bereits in der Geodatabase und wird überschrieben."
-            gdb_path = os.path.join(gdb_param, "geb_x_vn")
-            if arcpy.Exists(gdb_path):
-                message += "Die Tabelle 'geb_x_vn' existiert bereits in der Geodatabase und wird überschrieben."
-            if message:
-                parameters[1].setWarningMessage(message)
-
-        pass
+        utils.warn_overwriting_existing_layers(parameters[1], ["fsk_x_vn", "geb_x_vn"])
 
     def execute(self, parameters, _messages):
         nas_path = parameters[0].valueAsText
