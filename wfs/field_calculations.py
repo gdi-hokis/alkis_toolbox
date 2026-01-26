@@ -25,77 +25,17 @@ Enthält Funktionen für Berechnungen auf v_al_flurstueck, v_al_bodenschaetzung_
 import os
 import arcpy
 
-def alkis_calc(input_layer):
-    """
-    Führt spezifische Feldberechnungen für die heruntergeladenen Layer durch.
-    Behandelt:
-    - v_al_flurstueck: Flurnummer-ID, FSK, FLSTKEY, locator_place
-    - v_al_bodenschaetzung_f: Label-Beschriftung
-    - v_al_gebaeude: object_id UUID
-
-    :param input_layer: Input Layer/Feature Class/Shapefile (arcpy Layer-Objekt)
-    :param gdb: Geodatabase-Pfad
-    """
-    try:
-        # Extrahiere den Feature Class Namen aus dem Layer-Objekt
-        desc = arcpy.Describe(input_layer)
-        output_fc = desc.baseName  # Liefert nur den Namen ohne Pfad und Erweiterung
-        
-        # Ziel-Feature-Class Pfad
-        output_fc_path = os.path.join(gdb, output_fc)
-        
-        # Prüfen ob Feature Class bereits in der Ziel-GDB existiert
-        if arcpy.Exists(output_fc_path):
-            arcpy.AddMessage(f"- Feature Class '{output_fc}' existiert bereits in der Geodatabase")
-        else:
-            arcpy.AddMessage(f"- Kopiere '{output_fc}' in die Geodatabase...")
-            arcpy.management.CopyFeatures(input_layer, output_fc_path)
-
-        # Flurstücke - Feldberechnungen
-        if output_fc == "nora_v_al_flurstueck":
-            arcpy.AddMessage("- Starte Feldberechnungen für Flurstücke...")
-
-            # Flurnummer-Berechnung benötigt auch v_al_flur
-            if arcpy.Exists(os.path.join(gdb, "nora_v_al_flur")):
-                flur_fc_path = os.path.join(gdb, "nora_v_al_flur")
-                calculate_flurnummer_l(flur_fc_path, output_fc_path)
-                join_flurnamen(output_fc_path, flur_fc_path)
-                calculate_locator_place(output_fc_path)
-                clean_up_flur_fields(flur_fc_path)
-
-            # FSK and FLSTKEY
-            calculate_fsk(output_fc_path)
-            calculate_flstkey(output_fc_path)
-
-        # Bodenschätzung - Label-Berechnung
-        elif output_fc == "nora_v_al_bodenschaetzung_f":
-            arcpy.AddMessage("- Starte Feldberechnungen für Bodenschätzung...")
-            calculate_label_bodensch(output_fc_path)
-
-        # Gebäude - object_id Generierung
-        elif output_fc == "nora_v_al_gebaeude":
-            arcpy.AddMessage("- Starte Feldberechnungen für Gebäude...")
-            calculate_gebaeude_object_id(output_fc_path)
-        else:
-            arcpy.AddMessage(f"- Keine spezifischen Feldberechnungen für {output_fc} definiert.")
-
-    except Exception as e:
-        arcpy.AddWarning(f"Feldberechnungen für {output_fc} konnten nicht durchgeführt werden: {str(e)}")
-
-
-def calculate_flurnummer_l(flurstueck_fc):
+def calculate_flurnummer_l(target_fc):
     """
     Berechnet die Flurnummer-ID (flurnummer_l) aus Gemarkung und Flurnummer.
     Format: "080" + gemarkung_id + "00" + flurnummer
 
-    :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
+    :param target_fc: Feature Class der Flurstücke (v_al_flurstueck) oder Fluren (v_al_flur)
     """
     try:
-        arcpy.AddMessage("-"*40)
-        arcpy.AddMessage("Schritt 1 von 1 -- Flurnummer-ID für Flurstücke berechnen ...")
-        arcpy.AddMessage("-"*40)
+        arcpy.AddMessage("- Berechne Flurnummer-ID ...")
         arcpy.CalculateField_management(
-            flurstueck_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
+            target_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
         )
 
         return True
@@ -112,8 +52,15 @@ def join_flurnamen(flurstueck_fc, flur_fc):
     :param flur_fc: Feature Class der Fluren (v_al_flur)
     """
     try:
+        # Prüfe ob flurnummer_l in beiden Feature Classes vorhanden ist
+        for fc in [flurstueck_fc, flur_fc]:
+            fields = [f.name for f in arcpy.ListFields(fc)]
+            if "flurnummer_l" not in fields:
+                calculate_flurnummer_l(fc)
+
         arcpy.AddMessage("- Flurnamen mit Flurstücken verknüpfen...")
         arcpy.JoinField_management(flurstueck_fc, "flurnummer_l", flur_fc, "flurnummer_l", "flurname")
+        clean_up_flur_fields(flur_fc)
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Join Flurnamen: {str(e)}")
@@ -130,23 +77,18 @@ def calculate_locator_place(flurstueck_fc):
     try:
         # Prüfe ob erforderliche Felder vorhanden sind
         existing_fields = [f.name for f in arcpy.ListFields(flurstueck_fc)]
-        
+
         if "flurname" not in existing_fields:
-            # Prüfe ob flurnummer_l für Join vorhanden ist
-            if "flurnummer_l" not in existing_fields:
-                arcpy.AddMessage("- Feld 'flurnummer_l' fehlt, berechne es zuerst...")
-                calculate_flurnummer_l(flurstueck_fc)
-            
             arcpy.AddWarning(
-                "Feld 'flurname' fehlt. Führe join_flurnamen() mit der Flur-FC aus, "
-                "um das Feld zu übernehmen. Verwende stattdessen 'gemarkung_name'."
+                "Feld 'flurname' fehlt. Führe zuerst das Tool 'Flurnamen zu Flurstücken zuordnen' mit der Flur-FC aus, um das Feld zu übernehmen."
             )
-        
+            return False
+
         if "gemarkung_name" not in existing_fields:
             arcpy.AddError("Erforderliches Feld 'gemarkung_name' fehlt.")
             return False
 
-        arcpy.AddMessage("- Feld Locator-Place für Flurstücke berechnen...")
+        arcpy.AddMessage("- Berechne Locator-Place ...")
         arcpy.CalculateField_management(
             flurstueck_fc,
             "locator_place",
@@ -203,7 +145,7 @@ def calculate_flstkey(flurstueck_fc):
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
-        arcpy.AddMessage("- Feld FLSTKEY berechnen...")
+        arcpy.AddMessage("- Berechne FLSTKEY...")
         arcpy.CalculateField_management(
             flurstueck_fc,
             "FLSTKEY",
@@ -303,7 +245,7 @@ def calculate_gebaeude_object_id(gebaeude_fc):
     import uuid
     return str(uuid.uuid4())"""
 
-        arcpy.AddMessage("- Feld object_id für Gebäude generieren...")
+        arcpy.AddMessage("- Generiere object_id für Gebäude...")
         arcpy.CalculateField_management(gebaeude_fc, "object_id", "calcUuid()", "PYTHON3", code_block)
         return True
     except Exception as e:

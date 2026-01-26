@@ -43,7 +43,18 @@ class Toolbox:
         self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
 
         # List of tool classes associated with this toolbox
-        self.tools = [wfs_download, calc_lage_tool, calc_sfl, calc_flurnummer_id, calc_locator_place]
+        self.tools = [
+            wfs_download,
+            calc_lage_tool,
+            calc_sfl,
+            calc_flurnummer_id,
+            calc_locator_place,
+            join_flurnamen,
+            calc_fsk,
+            calc_flstkey,
+            calc_gebaeude_id,
+            calc_bodenschaetzung_label,
+        ]
 
 
 class calc_lage_tool:
@@ -381,14 +392,14 @@ class wfs_download:
 class calc_flurnummer_id:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Flurnummer-ID für Flurstücke berechnen"
-        self.description = "Führt verschiedene Feldberechnungen auf ALKIS-Daten durch (FLSTKEY, Lagebeschriftung Bodenschätzung)"
+        self.label = "Flurnummer-ID berechnen"
+        self.description = "Flurnummer-ID für Flurstücke oder Fluren berechnen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Flurstücke",
-            name="in_flst",
+            displayName="Feature Class der Flurstücke oder Fluren",
+            name="in_fc",
             datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input",
@@ -400,17 +411,17 @@ class calc_flurnummer_id:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
-        # flur_layer = parameters[0].value
-        flst_layer = parameters[0].value
+        fc_layer = parameters[0].value
 
-        wfs.field_calculations.calculate_flurnummer_l(flst_layer)
+        wfs.field_calculations.calculate_flurnummer_l(fc_layer)
 
 
 class calc_locator_place:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Locator Place für Flurstücke berechnen"
-        self.description = "Berechnet den Locator Place für ALKIS-Daten"
+        self.description = "Berechnet den Locator Place für ALKIS-Flurstücke"
+
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
@@ -423,7 +434,138 @@ class calc_locator_place:
         param0.filter.list = ["Polygon"]
         params = [param0]
         return params
+
     def execute(self, parameters, _messages):
         import wfs.field_calculations
         flst_layer = parameters[0].value
         wfs.field_calculations.calculate_locator_place(flst_layer)
+
+
+class join_flurnamen:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Flurnamen zu Flurstücken zuordnen"
+        self.description = "Führt einen Join der Flurnamen zu den Flurstücken durch"
+
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Feature Class der Flurstücke",
+            name="in_flst",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["Polygon"]
+
+        param1 = arcpy.Parameter(
+            displayName="Feature Class der Flurnamen",
+            name="in_flurnamen",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param1.filter.list = ["Polygon"]
+
+        params = [param0, param1]
+        return params
+
+    def execute(self, parameters, _messages):
+        import wfs.field_calculations
+
+        flst_layer = parameters[0].value
+        flurnamen_layer = parameters[1].value
+
+        wfs.field_calculations.join_flurnamen(flst_layer, flurnamen_layer)
+
+class calc_fsk:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "FSK für Flurstücke berechnen"
+        self.description = "Berechnet FSK für ALKIS-Flurstücke"
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Feature Class der Flurstücke",
+            name="in_flst",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["Polygon"]
+        params = [param0]
+        return params
+
+    def execute(self, parameters, _messages):
+        import wfs.field_calculations
+        flst_layer = parameters[0].value
+        wfs.field_calculations.calculate_fsk(flst_layer)
+
+class calc_flstkey:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "FLSTKEY für Flurstücke berechnen"
+        self.description = "Berechnet FLSTKEY für ALKIS-Flurstücke"
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Feature Class der Flurstücke",
+            name="in_flst",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["Polygon"]
+        params = [param0]
+        return params
+
+    def execute(self, parameters, _messages):
+        import wfs.field_calculations
+        flst_layer = parameters[0].value
+        wfs.field_calculations.calculate_flstkey(flst_layer)
+
+class calc_gebaeude_id:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Gebäude-ID für Gebäude berechnen"
+        self.description = "Berechnet die Gebäude-ID für ALKIS-Gebäude"
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Feature Class der Gebäude",
+            name="in_geb",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["Polygon"]
+        params = [param0]
+        return params
+
+    def execute(self, parameters, _messages):
+        import wfs.field_calculations
+        gebaeude_layer = parameters[0].value
+        wfs.field_calculations.calculate_gebaeude_object_id(gebaeude_layer)
+
+class calc_bodenschaetzung_label:
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Lagebeschriftung Bodenschätzung berechnen"
+        self.description = "Berechnet die Lagebeschriftung Bodenschätzung"
+    def getParameterInfo(self):
+        """Define the tool parameters."""
+        param0 = arcpy.Parameter(
+            displayName="Feature Class der Bodenschätzung",
+            name="in_bodensch",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["Polygon"]
+        params = [param0]
+        return params
+
+    def execute(self, parameters, _messages):
+        import wfs.field_calculations
+        bodensch_layer = parameters[0].value
+        wfs.field_calculations.calculate_label_bodensch(bodensch_layer)
