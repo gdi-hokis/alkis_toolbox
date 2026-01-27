@@ -19,11 +19,11 @@
 
 from xml.etree import ElementTree as ET
 import os
+import importlib
 import json
 from datetime import datetime
 import time
 import requests
-import importlib
 import arcpy
 import wfs_field_calculations
 
