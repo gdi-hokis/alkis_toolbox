@@ -45,8 +45,6 @@ class Toolbox:
         # List of tool classes associated with this toolbox
         self.tools = [
             wfs_download,
-            calc_lage_tool,
-            calc_sfl,
             calc_flurnummer_id,
             calc_locator_place,
             join_flurnamen,
@@ -55,175 +53,6 @@ class Toolbox:
             calc_gebaeude_id,
             calc_bodenschaetzung_label,
         ]
-
-
-class calc_lage_tool:
-    def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
-        self.label = "Lagebezeichnungen zuordnen"
-        self.description = "Verknüpft Lagebezeichnungen (Hausnummern, Straßen, Gewanne) mit Flurstücken und erstellt eine Navigation_Lage Tabelle"
-
-    def getParameterInfo(self):
-        """Define the tool parameters."""
-        param0 = arcpy.Parameter(
-            displayName="Ziel-Geodatabase wählen",
-            name="existing_geodatabase",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank für temporäre Daten",
-            name="workspace_database",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        params = [param0, param1]
-        return params
-
-    def isLicensed(self):
-        """Set whether the tool is licensed to execute."""
-        return True
-
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal validation is performed."""
-        return
-
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool parameter."""
-        workspace_param = parameters[0]
-
-        if workspace_param.value:
-            workspace_path = workspace_param.valueAsText
-            if not workspace_path.lower().endswith(".gdb"):
-                workspace_param.setErrorMessage("Bitte wählen Sie eine File-Geodatabase (.gdb) aus, kein Ordner.")
-        return
-
-    def execute(self, parameters, _messages):
-        gdb_path = parameters[0].valueAsText
-        work_folder = parameters[1].valueAsText
-
-        try:
-            import calc_lage
-
-            importlib.reload(calc_lage)
-            arcpy.AddMessage(f"Starte Lagebezeichnungsberechnung für {gdb_path}")
-
-            success = calc_lage.calculate_lage(work_folder, gdb_path)
-
-            if success:
-                arcpy.AddMessage("Lagebezeichnungsberechnung erfolgreich abgeschlossen")
-            else:
-                arcpy.AddError("Lagebezeichnungsberechnung fehlgeschlagen")
-
-            return success
-
-        except Exception as e:
-            arcpy.AddError(f"Fehler bei Lagebezeichnungsberechnung: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            return False
-
-
-class calc_sfl:
-    """
-    ArcGIS Toolbox Tool für SFL- und EMZ-Berechnung (optimierte Version).
-    """
-
-    def __init__(self):
-        self.label = "SFL & EMZ Berechnung (optimiert)"
-        self.description = """
-        Berechnet Schnittflächen (SFL) und Ertragsmesszahlen (EMZ) 
-        mit optimierter Pandas-Vectorisierung (~5-10x schneller).
-        """
-        self.canRunInBackground = True
-
-    def getParameterInfo(self):
-        """Definiert die Tool-Parameter."""
-
-        # Parameter 1: GDB Path
-        param0 = arcpy.Parameter(
-            displayName="Geodatabase",
-            name="gdb_path",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-        param0.filter.list = ["File Geodatabase"]
-
-        # Parameter 2: Workspace
-        param1 = arcpy.Parameter(
-            displayName="Arbeitsdatenbank",
-            name="workspace",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        # Parameter 5: Output Message
-        param2 = arcpy.Parameter(
-            displayName="Ergebnis",
-            name="output",
-            datatype="GPString",
-            parameterType="Derived",
-            direction="Output",
-        )
-
-        return [param0, param1, param2]
-
-    def isLicensed(self):
-        """Lizenzprüfung."""
-        # Keine speziellen Extensions erforderlich
-        return True
-
-    def updateParameters(self, parameters):
-        """Aktualisiere Parameter wenn sich andere Parameter ändern."""
-        pass
-
-    def updateMessages(self, parameters):
-        """Validiere Parameter."""
-        pass
-
-    def execute(self, parameters, messages):
-        """Hauptlogik des Tools."""
-
-        try:
-            import calc_sfl_optimized
-
-            importlib.reload(calc_sfl_optimized)
-            # Parse Parameter
-            gdb_path = parameters[0].valueAsText
-            workspace = parameters[1].valueAsText
-
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("SFL & EMZ BERECHNUNG - OPTIMIERTE VERSION")
-            arcpy.AddMessage("=" * 70)
-
-            arcpy.AddMessage("\nStarte OPTIMIERTE Berechnung...")
-            success = calc_sfl_optimized.calculate_sfl_optimized(gdb_path, workspace)
-
-            if not success:
-                arcpy.AddError("Berechnung fehlgeschlagen!")
-                parameters[2].value = "✗ FEHLER"
-                return
-
-            arcpy.AddMessage("\n" + "=" * 70)
-            arcpy.AddMessage("✓ BERECHNUNG ABGESCHLOSSEN")
-            arcpy.AddMessage("=" * 70)
-
-            # Output
-            parameters[2].value = "✓ Erfolgreich abgeschlossen"
-
-        except Exception as e:
-            arcpy.AddError(f"Fehler: {str(e)}")
-            import traceback
-
-            arcpy.AddError(traceback.format_exc())
-            parameters[2].value = f"✗ Fehler: {str(e)}"
 
 
 class wfs_download:
@@ -368,7 +197,6 @@ class wfs_download:
         importlib.reload(config.config_loader)
         importlib.reload(wfs.download)
 
-
         # Get Parameters
         polygon_fc = parameters[0].value
         checked_layers = parameters[1].valueAsText  # semicolon separated string
@@ -379,7 +207,9 @@ class wfs_download:
         cell_size = parameters[6].value
         timeout = parameters[7].value
         verify = parameters[8].value
-        wfs.download.wfs_download(polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir, checkbox, cell_size, timeout, verify, cfg)
+        wfs.download.wfs_download(
+            polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir, checkbox, cell_size, timeout, verify, cfg
+        )
 
         return
 
@@ -411,6 +241,7 @@ class calc_flurnummer_id:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
+
         fc_layer = parameters[0].value
 
         wfs.field_calculations.calculate_flurnummer_l(fc_layer)
@@ -437,6 +268,7 @@ class calc_locator_place:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
+
         flst_layer = parameters[0].value
         wfs.field_calculations.calculate_locator_place(flst_layer)
 
@@ -478,11 +310,13 @@ class join_flurnamen:
 
         wfs.field_calculations.join_flurnamen(flst_layer, flurnamen_layer)
 
+
 class calc_fsk:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "FSK für Flurstücke berechnen"
         self.description = "Berechnet FSK für ALKIS-Flurstücke"
+
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
@@ -498,14 +332,17 @@ class calc_fsk:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
+
         flst_layer = parameters[0].value
         wfs.field_calculations.calculate_fsk(flst_layer)
+
 
 class calc_flstkey:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "FLSTKEY für Flurstücke berechnen"
         self.description = "Berechnet FLSTKEY für ALKIS-Flurstücke"
+
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
@@ -521,14 +358,17 @@ class calc_flstkey:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
+
         flst_layer = parameters[0].value
         wfs.field_calculations.calculate_flstkey(flst_layer)
+
 
 class calc_gebaeude_id:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Gebäude-ID für Gebäude berechnen"
         self.description = "Berechnet die Gebäude-ID für ALKIS-Gebäude"
+
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
@@ -544,14 +384,17 @@ class calc_gebaeude_id:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
+
         gebaeude_layer = parameters[0].value
         wfs.field_calculations.calculate_gebaeude_object_id(gebaeude_layer)
+
 
 class calc_bodenschaetzung_label:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Lagebeschriftung Bodenschätzung berechnen"
         self.description = "Berechnet die Lagebeschriftung Bodenschätzung"
+
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
@@ -567,5 +410,6 @@ class calc_bodenschaetzung_label:
 
     def execute(self, parameters, _messages):
         import wfs.field_calculations
+
         bodensch_layer = parameters[0].value
         wfs.field_calculations.calculate_label_bodensch(bodensch_layer)
