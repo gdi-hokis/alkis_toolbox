@@ -82,8 +82,29 @@ def prepare_csv(input_csv):
     # Entferne die erste und letzten fünf Zeilen
     lines = lines[1:-5]
 
+    # Ersetze fehlerhafte HTML-Entity-Kodierungen und Encoding-Fehler
+    decoded_lines = []
+    for line in lines:
+        # HTML-Entities - sowohl mit als auch ohne Semikolon
+        line = line.replace("&apos;", "'")
+        line = line.replace("&apos", "'")
+        line = line.replace("&amp;", "&")
+        line = line.replace("&amp", "&")
+
+        # Encoding-Fehler beheben: Direkte Ersetzung der fehlerhaften Muster
+        # UTF-8 als Latin-1 interpretiert
+        mojibake_map = {
+            'Ã¼': 'ü', 'Ã¶': 'ö', 'Ã¤': 'ä', 'ÃŸ': 'ß',
+            'Ã': 'Ü', 'Ã–': 'Ö', 'Ã„': 'Ä',
+            'Â': ' '
+        }
+        for wrong, correct in mojibake_map.items():
+            line = line.replace(wrong, correct)
+
+        decoded_lines.append(line)
+
     with open(output_csv, "w", encoding=encoding, newline="") as f:
-        f.writelines(lines)
+        f.writelines(decoded_lines)
     return output_csv, abrufdatum
 
 
@@ -117,8 +138,7 @@ def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum, config):
             fsk = fsk[:6] + "___" + fsk[9:]
         if fsk[14:18] == "0000":
             fsk = fsk[:14] + "____" + fsk[18:]
-        if fsk[-2:] == "00":
-            fsk = fsk[:-2]
+        fsk = fsk[:-2]
         return fsk
         """,
         field_type="TEXT",
@@ -141,7 +161,7 @@ def spatial_join_gem_flst(gem, flst, gdb, owner_table, buffer_size, config):
     des gewählten Gebiets und verknüpft diese räumlich mit den Flurstücken. 
     Anschließend werden zwei Gemeindefelder zur Eigentümer-Tabelle hinzugefügt:
     - 'gemeinde': Gemeindename für Flurstücke innerhalb der Gemeindegrenze
-    - 'gemeinde_name': Gemeindename für Flurstücke im Pufferbereich (können mehrere Einträge haben)
+    - 'gemeinden_puffer': Gemeindennamen für Flurstücke im Pufferbereich (können mehrere Einträge haben)
     
     :param gem: Feature Class der Gemeinden mit Feld 'gemeinde_name'
     :param flst: Feature Class der Flurstücke mit Feld 'flstkey'
@@ -165,21 +185,22 @@ def spatial_join_gem_flst(gem, flst, gdb, owner_table, buffer_size, config):
         out_feature_class="v_al_flurstueck_SpatialJoin",
         join_operation="JOIN_ONE_TO_ONE",
         join_type="KEEP_ALL",
-        field_mapping=f'{join_field} "Flurstückskey" true true false 512 Text 0 0,First,#,{gdb}\\v_al_flurstueck,{join_field},0,512;gemeinde_name_1 "Gemeinde" true true false 100 Text 0 0,Join,", ",buffer,gemeinde_name,0,50',
+        field_mapping=f'{join_field} "Flurstückskey" true true false 512 Text 0 0,First,#,{gdb}\\v_al_flurstueck,{join_field},0,512;gemeinden_puffer "Gemeinden (Puffer)" true true false 100 Text 0 0,Join,", ",buffer,gemeinde_name,0,50',
         match_option="INTERSECT",
         search_radius=None,
         distance_field_name="",
     )
 
     # Gemeindefelder hinzufügen und umbenennen wie in der Hosted Table
-    # gemeinde_name: Gemeinde in der das Flurstück liegt
-    # gemeinde: Gemeinde im Pufferbereich (mehrere Einträge möglich)
+    # gemeinde: Gemeinde in der das Flurstück liegt
+    # gemeinden_puffer: Gemeinden im Pufferbereich (mehrere Einträge möglich)
     join_field_owner = config["eigentuemer"]["fsk"]
     join_field_flst = config["flurstueck"]["fsk"]
     arcpy.AddMessage("- Gemeindefelder zur Eigentümer-Tabelle hinzufügen...")
+    
+    # Gemeinde von Flurstücken joinen
     arcpy.JoinField_management(owner_table, join_field_owner, flst, join_field_flst, ["gemeinde_name"])
-    arcpy.AlterField_management(owner_table, "gemeinde_name", new_field_name="gemeinde")
-    arcpy.DeleteField_management(owner_table,"gemeinde_name")
-    arcpy.JoinField_management(owner_table, join_field_owner, "v_al_flurstueck_SpatialJoin", join_field_flst, ["gemeinde_name_1"])
-    arcpy.AlterField_management(owner_table, "gemeinde_name_1", new_field_name="gemeinde_name")
-    arcpy.DeleteField_management(owner_table,"gemeinde_name_1")
+    arcpy.AlterField_management(owner_table, "gemeinde_name", new_field_name="gemeinde", new_field_alias="Gemeinde")
+    
+    # Gemeinden aus Spatial Join hinzufügen
+    arcpy.JoinField_management(owner_table, join_field_owner, "v_al_flurstueck_SpatialJoin", join_field_flst, ["gemeinden_puffer"])
