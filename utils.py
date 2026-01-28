@@ -44,13 +44,14 @@ def warn_overwriting_existing_layers(parameter, layer_names):
             existing_layers.append(layer_name)
 
     if existing_layers:
+        message = "Folgende Layer existieren bereits in der Geodatabase und werden überschrieben: "
         if len(existing_layers) == 1:
-            warning = f"'{existing_layers[0]}' existiert bereits in der Geodatabase und wird überschrieben."
+            warning = f"'{existing_layers[0]}'"
         else:
             layer_list = "', '".join(existing_layers)
-            warning = f"'{layer_list}' existieren bereits in der Geodatabase und werden überschrieben."
+            warning = f"'{layer_list}'"
 
-        parameter.setWarningMessage(warning)
+        parameter.setWarningMessage(message + warning)
 
 
 def check_required_layers(parameter, required_layers):
