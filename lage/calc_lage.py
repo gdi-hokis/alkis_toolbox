@@ -22,6 +22,7 @@ Lagebezeichnungs-Berechnung - Verknüpft Lagebezeichnungen (Hausnummern, Straße
 import os
 from collections import defaultdict
 import arcpy
+from utils import add_step_message
 
 
 def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
@@ -72,9 +73,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 1: Lagebezeichnungspunkte vorbereiten & korrigieren
         # ============================================================================
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 1 von 6 -- Lagebezeichnungspunkte vorbereiten & Gebäude-Fallback-Geometrie...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Lagebezeichnungspunkte vorbereiten & Gebäude-Fallback-Geometrie", step=1, total_steps=6)
 
         # Filter: nur Lagebezeichnungen mit Hausnummern kopieren
         arcpy.FeatureClassToFeatureClass_conversion(gebaeude, work_gdb, "gebaeude_work")
@@ -139,9 +138,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 2: Spatial Join 1 - Flurstücke ← Lagebezeichnungspunkte
         # ============================================================================
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 2 von 6 -- Spatial Join 1: Flurstücke ← Lagebezeichnungspunkte...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Spatial Join 1: Flurstücke ← Lagebezeichnungspunkte", step=2, total_steps=6)
 
         arcpy.SpatialJoin_analysis(flurstueck, "lage_work", "flst_lage_punkte", "JOIN_ONE_TO_MANY", "KEEP_ALL")
         pts_count = arcpy.GetCount_management("flst_lage_punkte")[0]
@@ -151,9 +148,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 3: Spatial Join 2 - Flurstücke ← Strasse/Gewann-Polygone (mit negativem Puffer)
         # ============================================================================
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 3 von 6 -- Spatial Join 2: Flurstücke ← Strasse/Gewann-Polygone...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Spatial Join 2: Flurstücke ← Strasse/Gewann-Polygone", step=3, total_steps=6)
 
         # Erstelle negativen Puffer der Gewanne
         arcpy.analysis.PairwiseBuffer(lage_polygon, "lage_polygon_buffered", buffer_distance_or_field="-0.1 Meters")
@@ -191,9 +186,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 4: Kombiniere Punkte + Polygone mit JOIN_COUNT-Filter
         # ============================================================================
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 4 von 6 -- Kombiniere Punkte (JOIN_COUNT>0) + Polygone (JOIN_COUNT>0)...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Kombiniere Punkte + Polygone mit (JOIN_COUNT>0)", step=4, total_steps=6)
 
         # Filter: Punkte mit JOIN_COUNT > 0 (= haben einen Lage-Match)
         arcpy.FeatureClassToFeatureClass_conversion(
@@ -269,9 +262,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 5: Deduplication per Cursor-Iteration
         # ============================================================================
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 5 von 6 Deduplication pro Flurstück...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Deduplication pro Flurstück", step=5, total_steps=6)
 
         # Hole Spatial Reference von der Quell-Feature Class
         source_fc = "flst_lage_combined"
@@ -527,10 +518,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
         # ============================================================================
         # STEP 6: Ergebnisse in Ziel-Tabellen schreiben
         # ============================================================================
-
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage("Schritt 6 von 6 -- Ergebnisse in Ziel-Datei schreiben...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("Ergebnisse in Ziel-Datei schreiben", step=6, total_steps=6)
 
         # Nur diese Felder behalten
         keep_fields = {
@@ -590,9 +578,7 @@ def calculate_lage(cfg, work_gdb, gdb_path, keep_workdata, save_fc):
 
         # CLEANUP
         if not keep_workdata:
-            arcpy.AddMessage("-" * 40)
-            arcpy.AddMessage("CLEANUP -- Temporäre Daten löschen...")
-            arcpy.AddMessage("-" * 40)
+            add_step_message("CLEANUP -- Temporäre Daten löschen")
             arcpy.env.workspace = work_gdb
 
             temp_datasets = [
