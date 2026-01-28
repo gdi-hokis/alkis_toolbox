@@ -220,7 +220,7 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
                     all_temp_fcs[geom_type] = []
                 all_temp_fcs[geom_type].extend(fc_list)
 
-        # Nach allen Downloads: Temp FCs per Merge ins Template einfügen
+        # Nach allen Downloads: Temp FCs per Merge zusammenfassen und dann in Template appenden
         if template_fcs and all_temp_fcs:
             arcpy.AddMessage("- Füge alle vorbereiteten Features zusammen...")
 
@@ -233,9 +233,16 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
                         f"- Merge von {len(temp_fc_list)} temporären FCs mit insgesamt {total_features} Features..."
                     )
 
-                    # Merge statt einzelner Appends!
-                    arcpy.Merge_management(temp_fc_list, template_fc)
+                    # Erst alle temp FCs mergen (um Feldlängen zu erhalten)
+                    merged_temp_fc = os.path.join(workspace_gdb, f"merged_temp_{geom_type}_{int(time.time())}")
+                    arcpy.Merge_management(temp_fc_list, merged_temp_fc)
 
+                    # Dann in Template FC appenden
+                    arcpy.AddMessage(f"- Appende {total_features} Features in Template FC...")
+                    arcpy.Append_management(merged_temp_fc, template_fc, "NO_TEST")
+
+                    # Gemergte temp FC zur Löschliste hinzufügen
+                    process_fc.append(merged_temp_fc)
                     process_fc.extend(temp_fc_list)
 
         # Duplikate entfernen und Geometrien außerhalb des Eingabepolygons löschen
