@@ -262,11 +262,11 @@ class calc_flurnummer_id:
         return params
 
     def execute(self, parameters, _messages):
-        import wfs.field_calculations
+        import fields.calculations
 
         fc_layer = parameters[0].value
 
-        wfs.field_calculations.calculate_flurnummer_l(fc_layer)
+        fields.calculations.calculate_flurnummer_l(fc_layer)
 
 
 class calc_locator_place:
@@ -290,10 +290,10 @@ class calc_locator_place:
         return params
 
     def execute(self, parameters, _messages):
-        import wfs.field_calculations
+        import fields.calculations
 
         flst_layer = parameters[0].value
-        wfs.field_calculations.calculate_locator_place(flst_layer)
+        fields.calculations.calculate_locator_place(flst_layer)
 
 
 class join_flurnamen:
@@ -327,12 +327,12 @@ class join_flurnamen:
         return params
 
     def execute(self, parameters, _messages):
-        import wfs.field_calculations
+        import fields.calculations
 
         flst_layer = parameters[0].value
         flurnamen_layer = parameters[1].value
 
-        wfs.field_calculations.join_flurnamen(flst_layer, flurnamen_layer)
+        fields.calculations.join_flurnamen(flst_layer, flurnamen_layer)
 
 
 class calc_fsk:
@@ -356,10 +356,10 @@ class calc_fsk:
         return params
 
     def execute(self, parameters, _messages):
-        import wfs.field_calculations
+        import fields.calculations
 
         flst_layer = parameters[0].value
-        wfs.field_calculations.calculate_fsk(flst_layer)
+        fields.calculations.calculate_fsk(flst_layer)
 
 
 class calc_flstkey:
@@ -383,10 +383,10 @@ class calc_flstkey:
         return params
 
     def execute(self, parameters, _messages):
-        import wfs.field_calculations
+        import fields.calculations
 
         flst_layer = parameters[0].value
-        wfs.field_calculations.calculate_flstkey(flst_layer)
+        fields.calculations.calculate_flstkey(flst_layer)
 
 
 class calc_bodenschaetzung_label:
@@ -410,10 +410,10 @@ class calc_bodenschaetzung_label:
         return params
 
     def execute(self, parameters, _messages):
-        import wfs.field_calculations
+        import fields.calculations
 
         bodensch_layer = parameters[0].value
-        wfs.field_calculations.calculate_label_bodensch(bodensch_layer)
+        fields.calculations.calculate_label_bodensch(bodensch_layer)
 
 
 class calc_lage:
