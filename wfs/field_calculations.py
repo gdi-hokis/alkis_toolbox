@@ -3,7 +3,6 @@ Modul für Feldberechnungen auf WFS-Download Daten.
 Enthält Funktionen für Berechnungen auf v_al_flurstueck, v_al_bodenschaetzung_f und v_al_gebaeude.
 """
 
-import os
 import arcpy
 
 
