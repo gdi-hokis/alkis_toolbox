@@ -37,9 +37,7 @@ Statt Daten manuell über Web-Oberflächen herunterzuladen und separat zu konver
 
 ### FLSTKEY berechnen
 
-**Hintergrund:**
-
-Der FLSTKEY (Flurstückskennzeichen-Schlüssel) ist ein eindeutiger, strukturierter Identifier für Flurstücke, der sich aus der Gemarkung, Flurnummer und Flurstücksnummer zusammensetzt. Beispieldatensatz: 271-0-2344/2
+Dieses Werkzeug berechnet ein Feld "FLSTKEY" für die Flurstücke. Der FLSTKEY (Flurstückskennzeichen-Schlüssel) ist ein eindeutiger, strukturierter Identifier für Flurstücke, der sich aus der Gemarkung, Flurnummer und Flurstücksnummer zusammensetzt. Beispiel: 271-0-2344/2
 
 **Eingabedaten:**
 
@@ -49,11 +47,13 @@ Schema aus dem WFS des LGLs
 
 ### FSK berechnen
 
-**Hintergrund:**
+Dieses Werkzeug berechnet ein Feld "FSK" für die Flurstücke.
+Die FSK (Flurstückskennzeichen) ist eine verkürzte und lesbar gestaltete Schreibweise des vollständigen Flurstückskennzeichens. Sie wird ohne Flurstücksfolge berechnet.
+Beispiel: 080271\_\_\_023440002
 
-Die FSK (Flurstückskennzeichen) ist eine verkürzte und lesbar gestaltete Schreibweise des vollständigen Flurstückskennzeichens.
-Sie dient der Schaffung einer einheitlichen ID für die Verknüpfung mit den Eigentümern. Die FSK wird ohne Flurstücksfolge berechnet, damit Verknüpfungen mit Eigentümern bei Aktualisierungen, bei denen sich die Flurstücksfolge ändert, erhalten bleiben.
-Beispieldatensatz: 080271\_\_\_023440002
+**Hintergrund:**
+Für die Verknüpfung von Eigentümerdaten oder anderen Daten mit den Flurstücken ist es notwendig eine einheitliche ID zu generieren.
+In diesen Tabellen wird die FSK im gleichen Format berechnet. Eine Berechnung ohne Flurstücksfolge ermöglicht auch eine Verknüpfung, wenn sich bei Aktualisierungen nur die Folgennummer geändert hat.
 
 **Eingabedaten:**
 
@@ -62,6 +62,8 @@ Schema aus dem WFS des LGLs
 - Flurstücke (nora_v_al_flurstueck) mit dem Feld: flurstueckskennzeichen
 
 ### Flur-ID berechnen
+
+Dieses Werkzeug berechnet ein Feld "flur_id" für die Flurstücke und/oder die Fluren.
 
 **Hintergrund:**
 
@@ -75,9 +77,11 @@ Schema aus dem WFS des LGLs
 
 ### Flurnamen zu Flurstücken zuordnen
 
+Dieses Werkzeug berechnet ein Feld "flurname" für die Flurstücke. Hierzu verbindet es die Flurstücke mit den Fluren über einen eindeutigen flur_id-Identifikator aus Gemarkungs- und Flurnummer. Wenn dieses Feld noch nicht existiert, wird es zusätzlich berechnet und, wenn gewünscht, anschließend auch wieder gelöscht.
+
 **Hintergrund:**
 
-Verknüpft die Flurnamen aus dem Flurlayer mit den Flurstücken. Dies geschieht über eine Feldverbindung mit einem eindeutigen flur_id-Identifikator, der sich aus Gemarkungsnummer und Flurnummer zusammensetzt.
+Da in den Flurstücken keine Flurnamen enthalten sind, müssen diese explizit berechnet werden, um diese ohne anderweitige Verbindung anzeigen zu können.
 
 **Eingabedaten:**
 
@@ -88,15 +92,13 @@ Schema aus dem WFS des LGLs
 
 **Ablauf:**
 
-1. Prüfung und ggf. Berechnung der flur_id in beiden Feature-Classes
+1. Prüfung und ggf. Berechnung der "flur_id" in beiden Feature-Classes
 2. Übernahme des Feldes "flurname" in die Flurstück-FC über Join der Fluren mit der flur_id
 3. Löschen der flur_id, wenn sie nicht weiter benötigt wird
 
 ### Beschriftung (Label) für Bodenschätzung berechnen
 
-**Hintergrund:**
-
-Berechnet die Beschriftungen für die Bodenschätzungsflächen mit Bodenart, Klassifizierungen und Wertezahlen angelehnt an die VWVLK Baden-Württemberg. Diese wird in das Feld 'label' geschrieben. Die Berechnung platziert auch Zeilenumbrüche in die Beschriftung.
+Dieses Werkzeug berechnet ein Feld "label" für die Bodenschätzungsflächen. In diesem Feld werden Bodenart, Klassifizierungen und Wertzahlen mit Zeilenumbrüchen berechnet, angelehnt an die Beschriftung in der ALKIS-Karte nach VWVLK Baden-Württemberg.
 
 **Eingabedaten:**
 
@@ -106,9 +108,10 @@ Schema aus dem WFS des LGLs
 
 ### Locator Place berechnen
 
-**Hintergrund:**
+Dieses Werkzeug erstellt ein Feld 'locator_place'. In diesem Feld steht mit erster Priorität der Flurname, wenn es einen gibt, anderenfalls der Gemarkungsname.
 
-Erstellt ein Feld 'locator_place', was für die Erstellung eines Locators aus den Flurstücken genutzt werden kann. In diesem Feld steht mit erster Priorität der Flurname, wenn es einen gibt, anderenfalls der Gemarkungsname.
+**Hintergrund:**
+Die Flurnamen aus ALKIS sind unvollständig, da nur Flurnamen geführt werden, wenn es in der Gemarkung auch Fluren gibt. Für die Erstellung eines Flurstücks-Locators kann nur ein Feld mit Daten zu jedem Datensatz verwendet werden. In diesem Werkzeug wird ein solches Feld, was auch die Flurnamen berücksichtigt erstellt.
 
 **Eingabedaten:**
 
