@@ -15,8 +15,14 @@
 		"shape_area": "SHAPE@AREA",
 		"shape_length": "SHAPE@LENGTH",
 		"amtliche_flaeche": "amtliche_flaeche",
+		"gemarkung_id": "gemarkung_id",
+		"gemarkung_name": "gemarkung_name",
+		"flurnummer": "flurnummer",
+		"flurstueckstext": "flurstueckstext",
 		"objectid": "OBJECTID"
 	},
+
+	"flur": { "flurname": "flurname" },
 
 	"lagebezeichnung": {
 		"hausnummer": "hausnummer",

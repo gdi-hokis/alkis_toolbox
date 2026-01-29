@@ -39,7 +39,7 @@ Statt Daten manuell über Web-Oberflächen herunterzuladen und separat zu konver
 
 **Hintergrund:**
 
-Der FLSTKEY (Flurstückskennzeichen-Schlüssel) ist ein eindeutiger, strukturierter Identifier für Flurstücke, der sich aus der Gemarkung, Flurnummer und Flurstücksnummer zusammensetzt. Diese standardisierte Schreibweise (z.B. 271-0-2344) erleichtert Verknüpfungen zwischen verschiedenen Datensätzen und ermöglicht eine eindeutige Referenzierung von Flurstücken in Datenbanken und GIS-Analysen.
+Der FLSTKEY (Flurstückskennzeichen-Schlüssel) ist ein eindeutiger, strukturierter Identifier für Flurstücke, der sich aus der Gemarkung, Flurnummer und Flurstücksnummer zusammensetzt. Beispieldatensatz: 271-0-2344/2
 
 **Eingabedaten:**
 
@@ -47,17 +47,13 @@ Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck) mit den Feldern: gemarkung_id, flurnummer, flurstueckstext
 
-**Ablauf:**
-
-1. Das Tool extrahiert die Gemarkungs-ID, Flurnummer und Flurstückstext aus den Eingabedaten
-2. Diese Komponenten werden nach dem Schema "gemarkung_id-flurnummer-flurstueckstext" kombiniert
-3. Das berechnete FLSTKEY wird in das Feld "FLSTKEY" der Feature-Class geschrieben
-
 ### FSK berechnen
 
 **Hintergrund:**
 
-Die FSK (Flurstückskennzeichen-Kurzform) ist eine verkürzte und lesbar gestaltete Schreibweise des vollständigen Flurstückskennzeichens. Sie ersetzt führende Nullen in bestimmten Positionen durch Unterstriche und entfernt abschließende Ziffern, um eine kompaktere und lesbarere Darstellung zu ermöglichen. Dies ist besonders für die kartografische Beschriftung und die Anzeige in Karten relevant.
+Die FSK (Flurstückskennzeichen) ist eine verkürzte und lesbar gestaltete Schreibweise des vollständigen Flurstückskennzeichens.
+Sie dient der Schaffung einer einheitlichen ID für die Verknüpfung mit den Eigentümern. Die FSK wird ohne Flurstücksfolge berechnet, damit Verknüpfungen mit Eigentümern bei Aktualisierungen, bei denen sich die Flurstücksfolge ändert, erhalten bleiben.
+Beispieldatensatz: 080271\_\_\_023440002
 
 **Eingabedaten:**
 
@@ -65,19 +61,11 @@ Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck) mit dem Feld: flurstueckskennzeichen
 
-**Ablauf:**
-
-1. Das Tool liest das vollständige Flurstückskennzeichen aus dem Eingabe-Feld
-2. Führende Nullen an Position [6:9] werden durch "___" ersetzt
-3. Führende Nullen an Position [14:18] werden durch "____" ersetzt
-4. Die letzten zwei Ziffern werden entfernt
-5. Das berechnete FSK wird in das Feld "fsk" der Feature-Class geschrieben
-
-### Flurnummer-ID berechnen
+### Flur-ID berechnen
 
 **Hintergrund:**
 
-Die Flurnummer-ID (flurnummer_l) ist ein standardisierter Identifier, der eine Flur eindeutig identifiziert. Sie wird aus einer festen Präfix-Struktur mit der Gemarkungs-ID und Flurnummer konstruiert. Dieses Format ermöglicht eine konsistente, landesweite eindeutige Identifikation von Fluren und wird häufig für Verknüpfungen mit anderen ALKIS-Layern (z.B. Flurnamen) verwendet.
+Die Flur-ID (flur_id) ist ein Identifikator, der aus Gemarkungs-ID und Flurnummer zusammengesetzt wird. Da in den Flurstücken keine Flurnamen enthalten sind, wird er für die eindeutige Verknüpfung der Flurstücke mit ihren Flurnamen benötigt.
 
 **Eingabedaten:**
 
@@ -85,18 +73,11 @@ Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck) oder Fluren (nora_v_al_flur) mit den Feldern: gemarkung_id, flurnummer
 
-**Ablauf:**
-
-1. Das Tool liest die Gemarkungs-ID und Flurnummer aus den Eingabedaten
-2. Nach dem Muster "080" + gemarkung_id + "00" + flurnummer wird die Flurnummer-ID konstruiert
-3. Das Ergebnis wird in das Feld "flurnummer_l" der Feature-Class geschrieben
-4. Beispiel: Gemarkung-ID 12345, Flurnummer 678 → Flurnummer-ID: 08012345006780
-
 ### Flurnamen zu Flurstücken zuordnen
 
 **Hintergrund:**
 
-Verknüpft lokale Flurnamen mit Flurstücken über die eindeutige Flurnummer-ID, um eine bessere räumliche Orientierung zu ermöglichen.
+Verknüpft die Flurnamen aus dem Flurlayer mit den Flurstücken. Dies geschieht über eine Feldverbindung mit einem eindeutigen flur_id-Identifikator, der sich aus Gemarkungsnummer und Flurnummer zusammensetzt.
 
 **Eingabedaten:**
 
@@ -107,16 +88,15 @@ Schema aus dem WFS des LGLs
 
 **Ablauf:**
 
-1. Prüfung und ggf. Berechnung der Flurnummer-ID in beiden Feature-Classes
-2. Join der Flurstücke mit den Fluren über flurnummer_l
-3. Übernahme des Feldes "flurname" in die Flurstück-FC
-4. Aufräumen temporärer Felder
+1. Prüfung und ggf. Berechnung der flur_id in beiden Feature-Classes
+2. Übernahme des Feldes "flurname" in die Flurstück-FC über Join der Fluren mit der flur_id
+3. Löschen der flur_id, wenn sie nicht weiter benötigt wird
 
-### Lagebeschriftung Bodenschätzung berechnen
+### Beschriftung (Label) für Bodenschätzung berechnen
 
 **Hintergrund:**
 
-Berechnet ein strukturiertes Beschriftungsfeld für die kartografische Darstellung von Bodenschätzungsflächen mit Bodenart, Klassifizierungen und Wertezahlen.
+Berechnet die Beschriftungen für die Bodenschätzungsflächen mit Bodenart, Klassifizierungen und Wertezahlen angelehnt an die VWVLK Baden-Württemberg. Diese wird in das Feld 'label' geschrieben. Die Berechnung platziert auch Zeilenumbrüche in die Beschriftung.
 
 **Eingabedaten:**
 
@@ -124,31 +104,17 @@ Schema aus dem WFS des LGLs
 
 - Bodenschätzung (nora_v_al_bodenschaetzung_f) mit den Klassifizierungsfeldern
 
-**Ablauf:**
-
-1. Extraktion von Bodenart, Nutzungsart, Klassifizierungen und Wertezahlen
-2. Formatierung nach Nutzungsart (Acker, Grünland oder Grünland-Acker)
-3. Zusammenstellung in strukturierter Beschriftung (mit Zeilenumbrüchen)
-4. Speicherung im Feld "label"
-
 ### Locator Place berechnen
 
 **Hintergrund:**
 
-Bestimmt einen aussagekräftigen Ortsnamen für Flurstücke mit Priorität auf lokale Flurnamen vor übergeordneten Gemarkungsnamen für bessere Orientierung.
+Erstellt ein Feld 'locator_place', was für die Erstellung eines Locators aus den Flurstücken genutzt werden kann. In diesem Feld steht mit erster Priorität der Flurname, wenn es einen gibt, anderenfalls der Gemarkungsname.
 
 **Eingabedaten:**
 
 Schema aus dem WFS des LGLs
 
 - Flurstücke (nora_v_al_flurstueck) mit den Feldern: flurname, gemarkung_name
-
-**Ablauf:**
-
-1. Prüfung der erforderlichen Felder (flurname, gemarkung_name)
-2. Wenn vorhanden: Flurname verwenden
-3. Ansonsten: Gemarkungsname verwenden
-4. Speicherung im Feld "locator_place"
 
 ### Verschnitt Flurstück & Lagebezeichnung
 

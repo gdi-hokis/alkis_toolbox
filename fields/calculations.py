@@ -6,16 +6,19 @@ Enthält Funktionen für Berechnungen auf v_al_flurstueck, v_al_bodenschaetzung_
 import arcpy
 
 
-def calculate_flurnummer_l(target_fc):
+def calculate_flur_id(cfg, target_fc):
     """
     Berechnet die Flurnummer-ID (flurnummer_l) aus Gemarkung und Flurnummer.
     Format: "080" + gemarkung_id + "00" + flurnummer
     :param target_fc: Feature Class der Flurstücke (v_al_flurstueck) oder Fluren (v_al_flur)
     """
     try:
-        arcpy.AddMessage("- Berechne Flurnummer-ID ...")
+        arcpy.AddMessage("- Berechne Flur-ID ...")
         arcpy.CalculateField_management(
-            target_fc, "flurnummer_l", '"080"+$feature.gemarkung_id+"00"+$feature.flurnummer', "ARCADE"
+            target_fc,
+            "flur_id",
+            f'Text(Number($feature.{cfg["flurstueck"]["gemarkung_id"]}), "0000") + Text(Number($feature.{cfg["flurstueck"]["flurnummer"]}), "000")',
+            "ARCADE",
         )
 
         return True
@@ -24,7 +27,7 @@ def calculate_flurnummer_l(target_fc):
         return False
 
 
-def join_flurnamen(flurstueck_fc, flur_fc):
+def join_flurnamen(cfg, flurstueck_fc, flur_fc, delete_flur_id):
     """
     Verknüpft Flurnamen aus Flur-FC mit Flurstück-FC über flurnummer_l.
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
@@ -34,43 +37,31 @@ def join_flurnamen(flurstueck_fc, flur_fc):
         # Prüfe ob flurnummer_l in beiden Feature Classes vorhanden ist
         for fc in [flurstueck_fc, flur_fc]:
             fields = [f.name for f in arcpy.ListFields(fc)]
-            if "flurnummer_l" not in fields:
-                calculate_flurnummer_l(fc)
+            if "flur_id" not in fields:
+                calculate_flur_id(cfg, fc)
 
         arcpy.AddMessage("- Flurnamen mit Flurstücken verknüpfen...")
-        arcpy.JoinField_management(flurstueck_fc, "flurnummer_l", flur_fc, "flurnummer_l", "flurname")
-        clean_up_flur_fields(flur_fc)
+        arcpy.JoinField_management(flurstueck_fc, "flur_id", flur_fc, "flur_id", cfg["flur"]["flurname"])
+        if delete_flur_id:
+            clean_up_flur_id([flur_fc, flurstueck_fc])
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Join Flurnamen: {str(e)}")
         return False
 
 
-def calculate_locator_place(flurstueck_fc):
+def calculate_locator_place(cfg, flurstueck_fc):
     """
     Berechnet Locator-Place-Feld für Flurstücke.
     Priorität: Flurname > Gemarkungsname
     :param flurstueck_fc: Feature Class der Flurstücke (v_al_flurstueck)
     """
     try:
-        # Prüfe ob erforderliche Felder vorhanden sind
-        existing_fields = [f.name for f in arcpy.ListFields(flurstueck_fc)]
-
-        if "flurname" not in existing_fields:
-            arcpy.AddWarning(
-                "Feld 'flurname' fehlt. Führe zuerst das Tool 'Flurnamen zu Flurstücken zuordnen' mit der Flur-FC aus, um das Feld zu übernehmen."
-            )
-            return False
-
-        if "gemarkung_name" not in existing_fields:
-            arcpy.AddError("Erforderliches Feld 'gemarkung_name' fehlt.")
-            return False
-
         arcpy.AddMessage("- Berechne Locator-Place ...")
         arcpy.CalculateField_management(
             flurstueck_fc,
             "locator_place",
-            "calcPlace(!gemarkung_name!,!flurname!)",
+            f"calcPlace(!{cfg["flurstueck"]["gemarkung_name"]}!,!{cfg["flur"]["flurname"]}!)",
             "PYTHON3",
             """def calcPlace(gemarkung, flurname):
     if flurname:
@@ -84,7 +75,7 @@ def calculate_locator_place(flurstueck_fc):
         return False
 
 
-def calculate_fsk(flurstueck_fc):
+def calculate_fsk(cfg, flurstueck_fc):
     """
     Berechnet Flurstückskennzeichen-Kurzform (FSK).
     Ersetzt führende Nullen in bestimmten Positionen durch Unterstriche.
@@ -95,7 +86,7 @@ def calculate_fsk(flurstueck_fc):
         arcpy.CalculateField_management(
             flurstueck_fc,
             "fsk",
-            "replaceZerosInFSK(!flurstueckskennzeichen!)",
+            f"replaceZerosInFSK(!{cfg["flurstueck"]["flurstueckskennzeichen"]}!)",
             "PYTHON3",
             """def replaceZerosInFSK(flstId):
       fsk = flstId
@@ -113,7 +104,7 @@ def calculate_fsk(flurstueck_fc):
         return False
 
 
-def calculate_flstkey(flurstueck_fc):
+def calculate_flstkey(cfg, flurstueck_fc):
     """
     Berechnet FLSTKEY aus Gemarkung, Flurnummer und Flurstückstext.
     Format: gemarkung_id + "-" + flurnummer + "-" + flurstueckstext
@@ -124,7 +115,7 @@ def calculate_flstkey(flurstueck_fc):
         arcpy.CalculateField_management(
             flurstueck_fc,
             "FLSTKEY",
-            'str(int(!gemarkung_id!)) + "-" + str(int(!flurnummer!)) + "-" + !flurstueckstext!',
+            f'str(int(!{ cfg["flurstueck"]["gemarkung_id"]}!)) + "-" + str(int(!{cfg["flurstueck"]["flurnummer"]}!)) + "-" + !{cfg["flurstueck"]["flurstueckstext"]}!',
             "PYTHON3",
         )
         return True
@@ -133,7 +124,7 @@ def calculate_flstkey(flurstueck_fc):
         return False
 
 
-def calculate_label_bodensch(bodenschaetzung_fc):
+def calculate_label_bodensch(cfg, bodenschaetzung_fc):
     """
     Berechnet Beschriftungsfeld (label) für Bodenschätzung.
     Zeigt Bodenart, Klassifizierungen und Wertezahlen an.
@@ -195,25 +186,27 @@ def calcBeschriftung(bodenart, nutzungsart, entstehung, klimastufe, wasserstufe,
         arcpy.CalculateField_management(
             bodenschaetzung_fc,
             "label",
-            "calcBeschriftung(!bodenart_name!, !nutzungsart_name!, !entstehung_name!, !klima_name!, !wasser_name!, !bodenstufe_name!, !zustand_name!, !sonstige_angaben_name!, !bodenzahl!, !ackerzahl!)",
+            f"calcBeschriftung(!{cfg["bodenschaetzung"]["bodenart_name"]}!, !{cfg["bodenschaetzung"]["nutzungsart_name"]}!, !{cfg["bodenschaetzung"]["entstehung_name"]}!, !{cfg["bodenschaetzung"]["klima_name"]}!, !{cfg["bodenschaetzung"]["wasser_name"]}!, !{cfg["bodenschaetzung"]["bodenstufe_name"]}!, !{cfg["bodenschaetzung"]["zustand_name"]}!, !{ cfg["bodenschaetzung"]["sonstige_angaben_name"]}!, !{cfg["bodenschaetzung"]["bodenzahl"]}!, !{cfg["bodenschaetzung"]["ackerzahl"]}!)",
             "PYTHON3",
             code_block,
         )
+
         return True
     except Exception as e:
         arcpy.AddError(f"Fehler bei Berechnung Label Bodenschätzung: {str(e)}")
         return False
 
 
-def clean_up_flur_fields(flur_fc):
+def clean_up_flur_id(feature_classes):
     """
     Räumt temporäre Felder auf (z.B. flurnummer_l nach Join).
     :param flur_fc: Feature Class der Fluren (v_al_flur)
     """
     try:
-        if arcpy.ListFields(flur_fc, "flurnummer_l"):
-            arcpy.AddMessage("- Temporäre Felder löschen...")
-            arcpy.DeleteField_management(flur_fc, "flurnummer_l")
+        arcpy.AddMessage("- 'flur_id' löschen...")
+        for fc in feature_classes:
+            if arcpy.ListFields(fc, "flur_id"):
+                arcpy.DeleteField_management(fc, "flur_id")
         return True
     except Exception as e:
         arcpy.AddWarning(f"Warnung bei Löschen temporärer Felder: {str(e)}")

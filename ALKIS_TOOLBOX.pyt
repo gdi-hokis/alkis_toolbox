@@ -27,13 +27,9 @@ import config.config_loader
 import wfs.download
 
 import utils
-import sfl.init_dataframes
-import sfl.merge_mini_geometries
 
 importlib.reload(utils)
 importlib.reload(config.config_loader)
-importlib.reload(sfl.init_dataframes)
-importlib.reload(sfl.merge_mini_geometries)
 
 
 # Konfigurationsparameter
@@ -50,27 +46,27 @@ class Toolbox:
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
         .pyt file)."""
-        self.label = "ALKIS WFS Download"
-        self.alias = "ALKISWFSDownload"
-        self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen und Flächenberechnungen"
+        self.label = "ALKIS Toolbox"
+        self.alias = "ALKISToolbox"
+        self.description = "Diese Toolbox enthält Tools für ALKIS-Datenverarbeitung: WFS-Download, Lagebezeichnungen, Flächenberechnungen, Beschriftungen und weitere Feldberechnungen"
 
         # List of tool classes associated with this toolbox
         self.tools = [
-            wfs_download,
-            calc_lage,
-            calc_sfl_nutzung,
-            calc_sfl_bodenschaetzung,
-            extract_vn_from_nas,
-            calc_flurnummer_id,
-            calc_locator_place,
-            join_flurnamen,
-            calc_fsk,
-            calc_flstkey,
-            calc_bodenschaetzung_label,
+            WfsDownload,
+            CalcLage,
+            CalcSflNutzung,
+            CalcSflBodenschaetzung,
+            ExtractVnFromNas,
+            CalcFlurId,
+            CalcLocatorPlace,
+            JoinFlurnamen,
+            CalcFSK,
+            CalcFLSTKEY,
+            CalcBodenschaetzungLabel,
         ]
 
 
-class wfs_download:
+class WfsDownload:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         # Klassenvariablen anlegen
@@ -234,23 +230,18 @@ class wfs_download:
 
         return
 
-    def postExecute(self, _parameters):
-        """This method takes place after outputs are processed and
-        added to the display."""
-        return
 
-
-class calc_flurnummer_id:
+class CalcFlurId:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Flurnummer-ID berechnen"
-        self.description = "Flurnummer-ID für Flurstücke oder Fluren berechnen"
+        self.label = "Flurstücke / Fluren: Flur-ID berechnen"
+        self.description = "Flurstücke/ Fluren: Flur-ID berechnen"
         self.category = "Feldberechnungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Flurstücke oder Fluren",
+            displayName="Flurstücke oder Fluren",
             name="in_fc",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -261,25 +252,34 @@ class calc_flurnummer_id:
         params = [param0]
         return params
 
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        if parameters[0].valueAsText:
+            utils.check_required_fields(
+                parameters[0], [cfg["flurstueck"]["gemarkung_id"], cfg["flurstueck"]["flurnummer"]]
+            )
+        return
+
     def execute(self, parameters, _messages):
         import fields.calculations
 
         fc_layer = parameters[0].value
 
-        fields.calculations.calculate_flurnummer_l(fc_layer)
+        fields.calculations.calculate_flur_id(cfg, fc_layer)
 
 
-class calc_locator_place:
+class CalcLocatorPlace:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Locator Place für Flurstücke berechnen"
-        self.description = "Berechnet den Locator Place für ALKIS-Flurstücke"
+        self.label = "Flurstücke: Ortsnamen (locator_place) berechnen"
+        self.description = "Berechnet einen Ortsnamen für ALKIS-Flurstücke"
         self.category = "Feldberechnungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Flurstücke",
+            displayName="Flurstücke",
             name="in_flst",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -289,24 +289,31 @@ class calc_locator_place:
         params = [param0]
         return params
 
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        if parameters[0].valueAsText:
+            utils.check_required_fields(parameters[0], [cfg["flurstueck"]["gemarkung_name"], cfg["flur"]["flurname"]])
+        return
+
     def execute(self, parameters, _messages):
         import fields.calculations
 
         flst_layer = parameters[0].value
-        fields.calculations.calculate_locator_place(flst_layer)
+        fields.calculations.calculate_locator_place(cfg, flst_layer)
 
 
-class join_flurnamen:
+class JoinFlurnamen:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Flurnamen zu Flurstücken zuordnen"
+        self.label = "Flurstücke: Flurnamen zuordnen"
         self.description = "Führt einen Join der Flurnamen zu den Flurstücken durch"
         self.category = "Feldberechnungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Flurstücke",
+            displayName="Flurstücke",
             name="in_flst",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -315,7 +322,7 @@ class join_flurnamen:
         param0.filter.list = ["Polygon"]
 
         param1 = arcpy.Parameter(
-            displayName="Feature Class der Flurnamen",
+            displayName="Fluren",
             name="in_flurnamen",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -323,29 +330,47 @@ class join_flurnamen:
         )
         param1.filter.list = ["Polygon"]
 
-        params = [param0, param1]
+        param2 = arcpy.Parameter(
+            displayName="Flur-ID nach JOIN löschen?",
+            name="delete_flur_id",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param2.value = True
+        params = [param0, param1, param2]
         return params
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        if parameters[0].valueAsText:
+            utils.check_existing_fields(parameters[0], cfg["flur"]["flurname"])
+        return
 
     def execute(self, parameters, _messages):
         import fields.calculations
 
+        importlib.reload(fields.calculations)
+
         flst_layer = parameters[0].value
         flurnamen_layer = parameters[1].value
+        delete_flur_id = parameters[2].value
 
-        fields.calculations.join_flurnamen(flst_layer, flurnamen_layer)
+        fields.calculations.join_flurnamen(cfg, flst_layer, flurnamen_layer, delete_flur_id)
 
 
-class calc_fsk:
+class CalcFSK:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "FSK für Flurstücke berechnen"
-        self.description = "Berechnet FSK für ALKIS-Flurstücke"
+        self.label = "Flurstücke: FSK berechnen"
+        self.description = "Berechnet FSK (ohne Folgennummer) für ALKIS-Flurstücke"
         self.category = "Feldberechnungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Flurstücke",
+            displayName="Flurstücke",
             name="in_flst",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -355,24 +380,32 @@ class calc_fsk:
         params = [param0]
         return params
 
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        if parameters[0].valueAsText:
+            utils.check_required_fields(parameters[0], [cfg["flurstueck"]["flurstueckskennzeichen"]])
+        return
+
     def execute(self, parameters, _messages):
         import fields.calculations
 
+        importlib.reload(fields.calculations)
         flst_layer = parameters[0].value
-        fields.calculations.calculate_fsk(flst_layer)
+        fields.calculations.calculate_fsk(cfg, flst_layer)
 
 
-class calc_flstkey:
+class CalcFLSTKEY:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "FLSTKEY für Flurstücke berechnen"
+        self.label = "Flurstücke: FLSTKEY berechnen"
         self.description = "Berechnet FLSTKEY für ALKIS-Flurstücke"
         self.category = "Feldberechnungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Flurstücke",
+            displayName="Flurstücke",
             name="in_flst",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -382,24 +415,38 @@ class calc_flstkey:
         params = [param0]
         return params
 
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        if parameters[0].valueAsText:
+            utils.check_required_fields(
+                parameters[0],
+                [
+                    cfg["flurstueck"]["gemarkung_id"],
+                    cfg["flurstueck"]["flurnummer"],
+                    cfg["flurstueck"]["flurstueckstext"],
+                ],
+            )
+        return
+
     def execute(self, parameters, _messages):
         import fields.calculations
 
         flst_layer = parameters[0].value
-        fields.calculations.calculate_flstkey(flst_layer)
+        fields.calculations.calculate_flstkey(cfg, flst_layer)
 
 
-class calc_bodenschaetzung_label:
+class CalcBodenschaetzungLabel:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
-        self.label = "Lagebeschriftung Bodenschätzung berechnen"
-        self.description = "Berechnet die Lagebeschriftung Bodenschätzung"
+        self.label = "Bodenschätzung: Beschriftung (Label) berechnen"
+        self.description = "Berechnet die Beschriftung pro Bodenschätzungsfläche"
         self.category = "Feldberechnungen"
 
     def getParameterInfo(self):
         """Define the tool parameters."""
         param0 = arcpy.Parameter(
-            displayName="Feature Class der Bodenschätzung",
+            displayName="Bodenschätzungsflächen",
             name="in_bodensch",
             datatype="GPFeatureLayer",
             parameterType="Required",
@@ -409,14 +456,36 @@ class calc_bodenschaetzung_label:
         params = [param0]
         return params
 
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation."""
+        if parameters[0].valueAsText:
+            utils.check_required_fields(
+                parameters[0],
+                [
+                    cfg["bodenschaetzung"]["bodenart_name"],
+                    cfg["bodenschaetzung"]["nutzungsart_name"],
+                    cfg["bodenschaetzung"]["entstehung_name"],
+                    cfg["bodenschaetzung"]["klima_name"],
+                    cfg["bodenschaetzung"]["wasser_name"],
+                    cfg["bodenschaetzung"]["bodenstufe_name"],
+                    cfg["bodenschaetzung"]["zustand_name"],
+                    cfg["bodenschaetzung"]["sonstige_angaben_name"],
+                    cfg["bodenschaetzung"]["bodenzahl"],
+                    cfg["bodenschaetzung"]["ackerzahl"],
+                ],
+            )
+        return
+
     def execute(self, parameters, _messages):
         import fields.calculations
 
+        importlib.reload(fields.calculations)
         bodensch_layer = parameters[0].value
-        fields.calculations.calculate_label_bodensch(bodensch_layer)
+        fields.calculations.calculate_label_bodensch(cfg, bodensch_layer)
 
 
-class calc_lage:
+class CalcLage:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Verschnitt Flurstück & Lagebezeichnung"
@@ -493,7 +562,7 @@ class calc_lage:
             return False
 
 
-class calc_sfl_bodenschaetzung:
+class CalcSflBodenschaetzung:
     def __init__(self):
         self.label = "Verschnitt Flurstück & Bodenschätzung"
         self.description = """
@@ -555,7 +624,7 @@ class calc_sfl_bodenschaetzung:
         param4.category = "Schwellenwerte Kleinstflächen"
 
         param5 = arcpy.Parameter(
-            displayName="Maximalgröße zum Merge (m²)",
+            displayName="Kleinstflächenprüfung ab... (m² - Ganzzahl)",
             name="max_shred_area",
             datatype="GPDouble",
             parameterType="Required",
@@ -565,7 +634,7 @@ class calc_sfl_bodenschaetzung:
         param5.category = "Schwellenwerte Kleinstflächen"
 
         param6 = arcpy.Parameter(
-            displayName="Minimalgröße zum Merge (m²)",
+            displayName="Verschmelzen ohne Flächenformprüfung bis... (m² - Ganzzahl)",
             name="merge_area",
             datatype="GPLong",
             parameterType="Required",
@@ -575,7 +644,7 @@ class calc_sfl_bodenschaetzung:
         param6.category = "Schwellenwerte Kleinstflächen"
 
         param7 = arcpy.Parameter(
-            displayName="Mindestgröße (Löschschwelle - m²)",
+            displayName="Komplett löschen ohne Prüfung bis... (m² - Dezimalzahl)",
             name="delete_area",
             datatype="GPDouble",
             parameterType="Required",
@@ -643,7 +712,7 @@ class calc_sfl_bodenschaetzung:
             arcpy.AddError(f"Fehler: {str(e)}")
 
 
-class calc_sfl_nutzung:
+class CalcSflNutzung:
     def __init__(self):
         self.label = "Verschnitt Flurstück & Nutzung"
         self.description = """
@@ -705,7 +774,7 @@ class calc_sfl_nutzung:
         param4.category = "Schwellenwerte Kleinstflächen"
 
         param5 = arcpy.Parameter(
-            displayName="Maximalgröße zum Merge (m²)",
+            displayName="Kleinstflächenprüfung ab... (m² - Ganzzahl)",
             name="max_shred_area",
             datatype="GPDouble",
             parameterType="Required",
@@ -715,7 +784,7 @@ class calc_sfl_nutzung:
         param5.category = "Schwellenwerte Kleinstflächen"
 
         param6 = arcpy.Parameter(
-            displayName="Minimalgröße zum Merge (m²)",
+            displayName="Verschmelzen ohne Flächenformprüfung bis... (m² - Ganzzahl)",
             name="merge_area",
             datatype="GPLong",
             parameterType="Required",
@@ -725,7 +794,7 @@ class calc_sfl_nutzung:
         param6.category = "Schwellenwerte Kleinstflächen"
 
         param7 = arcpy.Parameter(
-            displayName="Mindestgröße (Löschschwelle - m²)",
+            displayName="Komplett löschen ohne Prüfung bis... (m² - Dezimalzahl)",
             name="delete_area",
             datatype="GPDouble",
             parameterType="Required",
@@ -790,7 +859,7 @@ class calc_sfl_nutzung:
             arcpy.AddError(f"Fehler beim Einlesen des Werkzeugs Verschnitt Flurstück & Nutzung: {str(e)}")
 
 
-class extract_vn_from_nas:
+class ExtractVnFromNas:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Veränderungsnummern aus NAS auslesen"
@@ -846,11 +915,11 @@ class extract_vn_from_nas:
         output_workspace = parameters[1].valueAsText
         work_folder = parameters[2].valueAsText
         keep_workdata = parameters[3].value
+        import vn.extract_vn
+
+        importlib.reload(vn.extract_vn)
 
         try:
-            import vn.extract_vn
-
-            importlib.reload(vn.extract_vn)
             success = vn.extract_vn.extract_vn(cfg, nas_path, output_workspace, work_folder, keep_workdata)
 
             if not success:

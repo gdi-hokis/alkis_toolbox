@@ -68,3 +68,40 @@ def check_required_layers(parameter, required_layers):
 
     if len(missing_layers) > 0:
         parameter.setErrorMessage(f"Folgende erforderlichen Layer fehlen in der GDB: {', '.join(missing_layers)}")
+
+
+def check_required_fields(feature_class_parameter, required_fields):
+    """
+    Prüft, ob die erforderlichen Felder in der Feature Class vorhanden sind.
+
+    :param feature_class: Pfad zur Feature Class
+    :param required_fields: Liste der erforderlichen Feldnamen
+    :return: Liste der fehlenden Felder
+    """
+    existing_fields = [f.name for f in arcpy.ListFields(feature_class_parameter.valueAsText)]
+    missing_fields = [field for field in required_fields if field not in existing_fields]
+    if missing_fields:
+        message = ", ".join(missing_fields)
+        feature_class_parameter.setErrorMessage(f"Folgende Pflichtfelder fehlen in den Eingabedaten: {message}")
+
+    return missing_fields
+
+
+def check_existing_fields(feature_class_parameter, field_names):
+    """
+    Prüft, ob bestimmte Felder bereits in der Feature Class vorhanden sind.
+
+    :param feature_class_parameter: arcpy.Parameter-Objekt mit Feature Class Pfad
+    :param field_names: Liste der zu prüfenden Feldnamen
+    :return: Liste der bereits vorhandenen Felder
+    """
+    fc_path = feature_class_parameter.valueAsText
+
+    existing_fields = [f.name for f in arcpy.ListFields(fc_path)]
+    found_fields = [field for field in field_names if field in existing_fields]
+
+    if found_fields:
+        message = ", ".join(found_fields)
+        feature_class_parameter.setErrorMessage("Felder schon vorhanden!: " + message)
+
+    return found_fields

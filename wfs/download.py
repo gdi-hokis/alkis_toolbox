@@ -4,13 +4,13 @@ import time
 from datetime import datetime
 import arcpy
 import requests
-from utils import add_step_message, progress_message
+from utils import add_step_message
 
 
 def wfs_download(
     polygon_fc, checked_layers, target_gdb, workspace_gdb, work_dir, checkbox, cell_size, timeout, verify, cfg
 ):
-    if timeout == 0:
+    if not timeout:
         timeout = None
 
     req_settings = [timeout, verify]
@@ -25,23 +25,21 @@ def wfs_download(
     arcpy.AddMessage(f"Layer ausgewählt: {layer_list}")
 
     process_fc = []
-    i = 2 if checkbox else 3
 
     # Schritt 1: Bounding Boxen erstellen
-    add_step_message("Download-Grids erstellen", 1, i)
+    add_step_message("Download-Grids erstellen", 1, 2)
     grid = create_grid_from_polygon(polygon_fc, workspace_gdb, cell_size, process_fc)
 
     # Schritt 2: Wfs im Bereich der Bounding Boxen downloaden
-    add_step_message("WFS-Daten herunterladen", 2, i)
+    add_step_message("WFS-Daten herunterladen", 2, 2)
     process_data, process_fc = download_wfs(
         grid, layer_list, target_gdb, workspace_gdb, work_dir, req_settings, polygon_fc, cfg, process_fc
     )
 
     # Schritt 3: Verarbeitungsdaten wieder entfernen
     if checkbox is False:
-        arcpy.AddMessage("-" * 40)
-        arcpy.AddMessage(f"Schritt 3 von {i} -- Verarbeitungsdaten entfernen ...")
-        arcpy.AddMessage("-" * 40)
+        add_step_message("CLEANUP -- Lösche Verarbeitungsdaten")
+
         # Verarbeitungsdaten aus geodatabase entfernen
         for fc in process_fc:
             if arcpy.Exists(fc):
@@ -198,7 +196,7 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
         all_temp_fcs = {}
 
         for index, bbox in enumerate(grid):
-            json_file = downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, v_al_layer)
+            json_file = download_json(bbox, layer, work_dir, index, req_settings, cfg, process_data, v_al_layer)
             if json_file is None:
                 continue
 
@@ -269,38 +267,7 @@ def download_wfs(grid, layer_list, target_gdb, workspace_gdb, work_dir, req_sett
     return process_data, process_fc
 
 
-def getDifferentGeometryTypes(json_file):
-    """
-    Teilt Layer mit verschiedenen Geometrietypen auf
-    """
-    geometry_types = []
-    with open(json_file, "r", encoding="utf-8") as geojson_file:
-        geojson_data = json.load(geojson_file)
-        for feature in geojson_data["features"]:
-            geometry_type = feature["geometry"]["type"]
-            if not geometry_type in geometry_types:
-                geometry_types.append(geometry_type)
-    return {"geometry_types": geometry_types, "geojson_data": geojson_data}
-
-
-def saveExtraJson(layer_name, geojson_data, geometry_type, work_dir):
-    """
-    Bei mehreren Geometrietypen werden die JSON-Daten separat gespeichert
-    """
-    json_data = {
-        "type": "FeatureCollection",
-        "features": [],
-        "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::25832"}},
-    }
-    for feature in geojson_data["features"]:
-        if feature["geometry"]["type"] == geometry_type:
-            json_data["features"].append(feature)
-
-    with open(work_dir + os.sep + "{0}.json".format(layer_name), "w", encoding="utf-8") as geometry_file:
-        json.dump(json_data, geometry_file)
-
-
-def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, v_al_layer):
+def download_json(bbox, layer, work_dir, index, req_settings, cfg, process_data, v_al_layer):
     """
     Führt den Download eines Rechteckes durch und speichert als JSON-Datei
     :param bbox: Bounding Box eines Rechteckes
@@ -329,7 +296,7 @@ def downloadJson(bbox, layer, work_dir, index, req_settings, cfg, process_data, 
         return None
 
     # Datei speichern
-    json_file = work_dir + os.sep + "{0}.json".format(layer_name)
+    json_file = work_dir + os.sep + f"{layer_name}.json"
     process_data.append(json_file)
     with open(json_file, "wb") as f:
         f.write(response.content)
@@ -477,10 +444,6 @@ def create_template_fc(json_file, layer_name, target_gdb, spatial_ref, force_suf
         # Abrufdatum hinzufügen
         fields_to_add.append(["Abrufdatum", "DATE"])
 
-        # Logging der Felddefinitionen
-        for field_def in fields_to_add:
-            arcpy.AddMessage(f"  → Feld: {field_def}")
-
         if fields_to_add:
             arcpy.AddFields_management(template_fc, fields_to_add)
 
@@ -567,7 +530,6 @@ def prepare_for_merge(json_file, template_fc_dict, spatial_ref, workspace_gdb, t
         temp_fc = os.path.join(workspace_gdb, temp_fc_name)
 
         try:
-            start_time = time.time()
             arcpy.AddMessage(
                 f"- Konvertiere {len(features)} Features aus {os.path.basename(json_file)} in Feature-Class..."
             )
