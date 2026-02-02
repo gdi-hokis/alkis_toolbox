@@ -63,6 +63,7 @@ class Toolbox:
             CalcFSK,
             CalcFLSTKEY,
             CalcBodenschaetzungLabel,
+            AlkisEigentuemer,
         ]
 
 
@@ -231,6 +232,120 @@ class WfsDownload:
         return
 
 
+class AlkisEigentuemer:
+    """
+    ArcGIS Toolbox Tool für das Verknüpfen von ALKIS-Eigentümerdaten
+    Eigentümerdaten einer CSV-Datei werden mit ALKIS-Flurstücken verknüpft
+    """
+
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "Eigentümer-CSV formatieren"
+        self.alias = "alkis_eigentuemer"
+        self.description = "Dieses Tool verknüpft Eigentümerdaten einer csv-Datei mit ALKIS-Daten"
+        self.category = "Eigentümerdaten"
+
+    def getParameterInfo(self):
+        """Define parameter definitions"""
+
+        param0 = arcpy.Parameter(
+            displayName="Pfad zur ALKIS-Eigentümer CSV-Datei",
+            name="alkis_csv",
+            datatype="DEFile",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["csv"]
+
+        param1 = arcpy.Parameter(
+            displayName="Gemeinden",
+            name="feature_class_gemeinden",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param1.filter.list = ["Polygon"]
+
+        param2 = arcpy.Parameter(
+            displayName="Flurstücke",
+            name="feature_class_flurstuecke",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param2.filter.list = ["Polygon"]
+
+        param3 = arcpy.Parameter(
+            displayName="Ausgabe-Tabelle Eigentümer",
+            name="endresult_table_eigentuemer",
+            datatype="DETable",
+            parameterType="Required",
+            direction="Output",
+        )
+
+        param4 = arcpy.Parameter(
+            displayName="Größe des Puffers [m]",
+            name="buffer_size",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input",
+        )
+        param4.category = "Weitere Parameter"
+        param4.value = 500
+
+        param5 = arcpy.Parameter(
+            displayName="Verarbeitungsdaten behalten?",
+            name="process_data",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input",
+        )
+        param5.category = "Weitere Parameter"
+        param5.value = False
+
+        params = [param0, param1, param2, param3, param4, param5]
+        return params
+
+    def updateMessages(self, parameters):
+        """
+        Modify the messages created by internal validation for each tool
+        parameter. This method is called after internal validation.
+        """
+        fc_gemeinden = parameters[1]
+        fc_flurstuecke = parameters[2]
+        buffer_size = parameters[4]
+
+        # Parameter 2: Feature Class Gemeinden validieren
+        utils.check_required_fields(fc_gemeinden, [cfg["gemeinde"]["gemeinde_name"]])
+
+        # Parameter 3: Feature Class Flurstücke validieren
+        utils.check_required_fields(fc_flurstuecke, [cfg["eigentuemer"]["fsk"]])
+
+        # Parameter 5: Buffer-Größe validieren
+        if buffer_size.value is not None and buffer_size.value < 0:
+            buffer_size.setErrorMessage("Die Puffergröße darf nicht negativ sein.")
+
+        return
+
+    def execute(self, parameters, messages):
+        """The source code of the tool."""
+        import owner.copy_alkis_eigentuemer
+
+        importlib.reload(owner.copy_alkis_eigentuemer)
+
+        # Get Parameters
+        alkis_csv = parameters[0].valueAsText
+        fc_gemeinden = parameters[1].value
+        fc_flurstuecke = parameters[2].value
+        output_table = parameters[3].valueAsText
+        buffer_size = parameters[4].value
+        keep_temp_data = parameters[5].value
+        owner.copy_alkis_eigentuemer.copy_alkis_eigentuemer(
+            alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data
+        )
+        return
+
+
 class CalcFlurId:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
@@ -345,7 +460,7 @@ class JoinFlurnamen:
         """Modify the messages created by internal validation for each tool
         parameter. This method is called after internal validation."""
         if parameters[0].valueAsText:
-            utils.check_existing_fields(parameters[0], cfg["flur"]["flurname"])
+            utils.check_existing_fields(parameters[0], [cfg["flur"]["flurname"]])
         return
 
     def execute(self, parameters, _messages):
@@ -650,7 +765,7 @@ class CalcSflBodenschaetzung:
             parameterType="Required",
             direction="Input",
         )
-        param7.value = 0.1
+        param7.value = 0.5
         param7.category = "Schwellenwerte Kleinstflächen"
 
         param8 = arcpy.Parameter(

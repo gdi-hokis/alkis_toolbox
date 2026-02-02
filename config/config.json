@@ -78,6 +78,16 @@
 		"klassifizierung_name": "klassifizierung_name"
 	},
 
+	"eigentuemer": {
+		"flst": "Flurstueck",
+		"fkz": "FKZ",
+		"fsk": "fsk"
+	},
+
+	"gemeinde": {
+		"gemeinde_name": "gemeinde_name"
+	},
+
 	"wfs_config": {
 		"wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
 		"params_capabilities": {

@@ -35,6 +35,24 @@ Statt Daten manuell über Web-Oberflächen herunterzuladen und separat zu konver
 5. **Filterung:** Geometrien außerhalb des Eingabe-Polygons werden gelöscht
 6. **Bereinigung:** Temporäre Daten werden optional entfernt
 
+### Eigentümer-CSV formatieren
+
+Dieses Werkzeug formatiert die Eigentümer-CSV des LGLs, indem es überflüssige Zeilen entfernt, die Sonderzeichen "&" und "'" decodiert und neue Felder hinzufügt:
+
+- "gemeinde" (für Suchen)
+- "gemeinden_puffer" (für Sichten - enthält, alle Gemeindenamen kommasepariert, die in einem bestimmten Radius um das Flurstück liegen)
+- "abrufdatum" (aus der CSV-Tabelle übernommen)
+- "fsk" (für die Verknüpfung mit den Flurstücken) - Format aus dem Werkzeug "FSK berechnen"
+
+**Eingabedaten:**
+
+Schema aus dem WFS des LGLs
+
+- Flurstücke (nora_v_al_flurstueck) mit dem Feld "fsk" (Berechnung über das Werkzeug "FSK berechnen" möglich)
+- Gemeinden (nora_v_al_gemeinde) mit dem Feld "gemeinde_name"
+- Eigentümer-CSV des LGLs
+- Pufferradius
+
 ### FLSTKEY berechnen
 
 Dieses Werkzeug berechnet ein Feld "FLSTKEY" für die Flurstücke. Der FLSTKEY (Flurstückskennzeichen-Schlüssel) ist ein eindeutiger, strukturierter Identifier für Flurstücke, der sich aus der Gemarkung, Flurnummer und Flurstücksnummer zusammensetzt. Beispiel: 271-0-2344/2
@@ -159,7 +177,7 @@ Schema aus dem WFS des LGLs
 **Ablauf:**
 
 1. Verschnitt Flurstücke und Nutzung
-2. Filterung der Miniflächen und Verschmelzung dieser mit Nachbarflurstücken (mit shapely)
+2. Filterung der Miniflächen und Verschmelzung dieser mit Nachbarflurstücken
 3. Berechnung der Schnittflächen und Deltakorrektur zur amtlichen Flurstücksfläche
 
 **Hinweis:**
@@ -217,7 +235,7 @@ Veränderungsnummern (VN) dokumentieren Änderungen an ALKIS-Objekten und sind �
 
 1. Durchsuchen aller XML-Dateien im angegebenen NAS-Verzeichnis
 2. Extraktion der Veränderungsnummern (nur VN mit Endung 'F' oder 'V') aus den Fachdatenverbindungen
-3. Erstellung von CSV-Tabellen mit den Zuordnungen: GML-ID zu Veränderungsnummern
+3. Erstellung von CSV-Tabellen mit den Zuordnungsschlüsseln fsk - vn (Flurstücke), gmlId - vn (Gebäude)
 4. Optional: Speicherung der Ergebnisse in einer Geodatabase als Tabellen fsk_x_vn (mit Flurstückskennzeichen) und geb_x_vn
 
 **Hinweis:**

@@ -78,6 +78,8 @@ def check_required_fields(feature_class_parameter, required_fields):
     :param required_fields: Liste der erforderlichen Feldnamen
     :return: Liste der fehlenden Felder
     """
+    if not feature_class_parameter.valueAsText:
+        return
     existing_fields = [f.name for f in arcpy.ListFields(feature_class_parameter.valueAsText)]
     missing_fields = [field for field in required_fields if field not in existing_fields]
     if missing_fields:

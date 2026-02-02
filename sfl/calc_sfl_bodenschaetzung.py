@@ -285,6 +285,17 @@ def vectorized_calculate_sfl_boden(
         df["schaetz_afl"] = df["fsk"].map(schaetz_afl_dict).fillna(0).astype(int)
 
         arcpy.AddMessage("- Berechne gerundete Feature-SFL und EMZ mit Verbesserungsfaktor...")
+        # Fülle fehlende Werte und filtere nicht-finite Werte
+        df["verbesserung"] = df["verbesserung"].fillna(1.0)
+        df["ackerzahl"] = df["ackerzahl"].fillna(0)
+        df["geom_area"] = df["geom_area"].fillna(0)
+
+        # Ersetze inf Werte mit 0
+        df["verbesserung"] = df["verbesserung"].replace([float("inf"), float("-inf")], 0)
+        df["ackerzahl"] = df["ackerzahl"].replace([float("inf"), float("-inf")], 0)
+        df["geom_area"] = df["geom_area"].replace([float("inf"), float("-inf")], 0)
+
+        # Berechne SFL und EMZ
         df["sfl"] = (df["geom_area"] * df["verbesserung"] + 0.5).astype(int)
         df["emz"] = (df["sfl"] / 100 * df["ackerzahl"]).round().astype(int)
 
