@@ -179,21 +179,20 @@ def prepare_boden(cfg, gdb_path, workspace, xy_tolerance):
 
         arcpy.AddMessage("- Lade Bewertung in Bodenschätzung und setze Bodenzahl, Ackerzahl und EMZ=0...")
 
+        flstkennzeichen = flst["flurstueckskennzeichen"]
+        afl = flst["amtliche_flaeche"]
+        nutzungsart_id = bod["nutzungsart_id"]
+        nutzungsart_name = bod["nutzungsart_name"]
+        klassifizierung_id = bew["klassifizierung_id"]
+        klassifizierung_name = bew["klassifizierung_name"]
+        sonstige_angaben_name = bod["sonstige_angaben_name"]
+
         field_mapping = (
-            r'{1} "flurstueckskennzeichen" true true false 254 Text 0 0,First,#,{0},{1},0,254;'
-            r'{2} "amtliche_flaeche" true true false 4 Long 0 0,First,#,{0},{2},-1,-1;'
-            r'{3} "nutzungsart_id" true true false 4 Long 0 0,First,#,{0},{4},-1,-1;'
-            r'{5} "nutzungsart_name" true true false 254 Text 0 0,First,#,{0},{6},0,254;'
-            r'{7} "sonstige_angaben_name" true true false 254 Text 0 0,First,#,{0},{6},0,254'
-        ).format(
-            "fsk_bewertung_dissolve",
-            flst["flurstueckskennzeichen"],
-            flst["amtliche_flaeche"],
-            bod["nutzungsart_id"],
-            bew["klassifizierung_id"],
-            bod["nutzungsart_name"],
-            bew["klassifizierung_name"],
-            bod["sonstige_angaben_name"],
+            rf'{flstkennzeichen} "flurstueckskennzeichen" true true false 254 Text 0 0,First,#,"fsk_bewertung_dissolve",{flstkennzeichen},0,254;'
+            rf'{afl} "amtliche_flaeche" true true false 4 Long 0 0,First,#,"fsk_bewertung_dissolve",{afl},-1,-1;'
+            rf'{nutzungsart_id} "nutzungsart_id" true true false 4 Long 0 0,First,#,"fsk_bewertung_dissolve",{klassifizierung_id},-1,-1;'
+            rf'{nutzungsart_name} "nutzungsart_name" true true false 254 Text 0 0,First,#,"fsk_bewertung_dissolve",{klassifizierung_name},0,254;'
+            rf'{sonstige_angaben_name} "sonstige_angaben_name" true true false 254 Text 0 0,First,#,"fsk_bewertung_dissolve",{klassifizierung_name},0,254'
         )
 
         arcpy.Append_management("fsk_bewertung_dissolve", "fsk_bodenschaetzung", "NO_TEST", field_mapping)

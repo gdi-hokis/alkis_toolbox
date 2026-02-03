@@ -219,6 +219,30 @@ Für Fließgewässer (44001), Stehendes Gewässer (44006) findet eine Überprüf
 
 Bewertungen ohne Bodenschätzung - siehe VWVLK Anlage 1 (3100, 3105, 3200, 3411, 3480, 3481, 3482, 3490, 3510, 3520, 3530, 3600, 3610, 3611, 3612, 3613, 3614, 3615, 3616, 3710, 3999)
 
+### Flurstücks-Locator erstellen/überschreiben
+
+Dieses Werkzeug erstellt oder aktualisiert einen Locator für ALKIS-Flurstücke, der das Suchen nach Flurstücken ermöglicht. Optional kann der Locator auch im Portal als Geocode Service veröffentlicht werden.
+
+**Hintergrund:**
+Wenn die ALKIS-Daten aktualisiert werden, wird der Locator nicht automatisch mitaktualisiert. Dieses Werkzeug ermöglicht einen standardisierten Workflow für die regelmäßige Locator-Aktualisierung.
+
+**Eingabedaten:**
+
+Schema aus dem WFS des LGLs
+
+- Flurstücke (nora_v_al_flurstueck) mit den Feldern: flurstueckstext, gemeinde_name, gemarkung_id, gemarkung_name, flurname, locator_place
+
+**Ablauf:**
+
+1. Locator erstellen/aktualisieren: Entweder wird ein komplett neuer Locator erstellt oder, wenn der Locator bereits lokal abgelegt ist und sich nur die Daten der gleichen Datenquelle geändert haben, es wird ein Reindexing des vorhandenen Locators durchgeführt.
+
+2. Portal-Veröffentlichung (optional): Der Locator wird in das verbundene Portal als Geocode Service "Flurstuecke_Locator" hochgeladen oder ein vorhandener Service wird überschrieben
+
+3. Optional: Öffentliche Freigabe des Services
+
+**Hinweis:**
+Beim Update eines Geocoding Service werden Freigabeeinstellungen auf privat zurückgesetzt. Das Werkzeug bietet eine Checkbox zur automatischen öffentlichen Freigabe – so entfällt die manuelle Neukonfiguration.
+
 ### Veränderungsnummern aus NAS auslesen
 
 Dieses Werkzeug liest Veränderungsnummern von Flurstücken und Gebäuden aus NAS-XML-Dateien aus und erstellt zwei Verknüpfungstabellen (fsk_x_vn und geb_x_vn).

@@ -19,7 +19,8 @@
 		"gemarkung_name": "gemarkung_name",
 		"flurnummer": "flurnummer",
 		"flurstueckstext": "flurstueckstext",
-		"objectid": "OBJECTID"
+		"objectid": "OBJECTID",
+		"gemeinde_name": "gemeinde_name"
 	},
 
 	"flur": { "flurname": "flurname" },

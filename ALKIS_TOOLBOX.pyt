@@ -38,9 +38,6 @@ cfg = config.config_loader.FieldConfigLoader.load_config()
 # Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
 layers_initialized = False
 
-# Flag, dass GetCapabilities-Aufruf in der Methode updateParameters nicht mehrmals aufgerufen wird
-layers_initialized = False
-
 
 class Toolbox:
     def __init__(self):
@@ -64,6 +61,7 @@ class Toolbox:
             CalcFLSTKEY,
             CalcBodenschaetzungLabel,
             AlkisEigentuemer,
+            CreateOverwriteLocator,
         ]
 
 
@@ -1043,3 +1041,111 @@ class ExtractVnFromNas:
         except Exception as e:
             arcpy.AddError(f"Fehler beim Aufruf des Werkzeugs Veränderungsnummern aus NAS auslesen: {str(e)}")
             return False
+
+
+class CreateOverwriteLocator:
+    def __init__(self):
+        self.label = "Flurstücks-Locator erstellen/überschreiben"
+        self.description = "Erstellt oder überschreibt einen Locator für ALKIS-Flurstücke"
+        self.category = "Locator"
+
+    def getParameterInfo(self):
+        param0 = arcpy.Parameter(
+            displayName="Flurstücke",
+            name="in_flst",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param0.filter.list = ["Polygon"]
+
+        param1 = arcpy.Parameter(
+            displayName="Verzeichnis für lokalen Locator",
+            name="output_folder",
+            datatype="DEFolder",
+            parameterType="Required",
+            direction="Input",
+        )
+
+        param2 = arcpy.Parameter(
+            displayName="Bestehender lokaler Locator zum Aktualisieren (optional)",
+            name="locator_local",
+            datatype="DEAddressLocator",
+            parameterType="Optional",
+            direction="Input",
+        )
+
+        param3 = arcpy.Parameter(
+            displayName="Locator ins Portal veröffentlichen / überschreiben?",
+            name="overwrite_locator",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.value = True
+
+        param4 = arcpy.Parameter(
+            displayName="Locator-Item, das überschrieben werden soll",
+            name="locator_item",
+            datatype="DEAddressLocator",
+            parameterType="Optional",
+            direction="Input",
+        )
+
+        param5 = arcpy.Parameter(
+            displayName="Locator öffentlich freigeben?",
+            name="publish_service",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input",
+        )
+        param5.value = True
+
+        params = [param0, param1, param2, param3, param4, param5]
+        return params
+
+    def updateParameters(self, parameters):
+        """Dynamische Anzeige der Parameter basierend auf Auswahl."""
+        # Parameter 4 und 5 nur anzeigen, wenn Parameter 3 (Portal-Veröffentlichung) True ist
+        if parameters[3].value:
+            parameters[4].enabled = True
+            parameters[5].enabled = True
+        else:
+            parameters[4].enabled = False
+            parameters[4].value = None
+            parameters[5].enabled = False
+            parameters[5].value = False
+        return
+
+    def updateMessages(self, parameters):
+        """Validierung der Parameter."""
+        # Prüfe erforderliche Felder im Flurstückslayer
+        if parameters[0].valueAsText:
+            utils.check_required_fields(
+                parameters[0],
+                [
+                    cfg["flurstueck"]["flurstueckstext"],
+                    cfg["flurstueck"]["gemeinde_name"],
+                    cfg["flurstueck"]["gemarkung_id"],
+                    cfg["flurstueck"]["gemarkung_name"],
+                    cfg["flur"]["flurname"],
+                    "locator_place",
+                ],
+            )
+        return
+
+    def execute(self, parameters, _messages):
+        import locator.build_update_locator
+
+        importlib.reload(locator.build_update_locator)
+
+        flst_layer = parameters[0].valueAsText
+        output_folder = parameters[1].valueAsText
+        locator_local = parameters[2].valueAsText if parameters[2].value else None
+        locator_item = parameters[4].valueAsText if parameters[4].value else None
+        overwrite_service = parameters[3].value
+        publish_service = parameters[5].value
+
+        locator.build_update_locator.build_update_locator(
+            cfg, flst_layer, output_folder, locator_local, locator_item, overwrite_service, publish_service
+        )

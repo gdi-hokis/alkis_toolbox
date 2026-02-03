@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import arcpy
+from utils import add_step_message
 
 
 def copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data):
@@ -21,21 +22,15 @@ def copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table
     arcpy.env.workspace = output_gdb
 
     # Schritt 1: csv bereinigen
-    arcpy.AddMessage("-" * 40)
-    arcpy.AddMessage("Schritt 1 von 3 -- CSV vorbereiten ...")
-    arcpy.AddMessage("-" * 40)
+    add_step_message(1, 3, "CSV vorbereiten")
     prepared_csv, abrufdatum = prepare_csv(alkis_csv)
 
     # Schritt 2: Eigentümer-Tabelle erstellen
-    arcpy.AddMessage("-" * 40)
-    arcpy.AddMessage("Schritt 2 von 3 -- Eigentümer-Tabelle erstellen ...")
-    arcpy.AddMessage("-" * 40)
+    add_step_message(2, 3, "Eigentümer-Tabelle erstellen")
     make_eigentuemer_table(prepared_csv, output_gdb, output_table_name, abrufdatum, cfg)
 
     # Schritt 3: räumliche Verknüpfung mit Flurstücken und Gemeinden
-    arcpy.AddMessage("-" * 40)
-    arcpy.AddMessage("Schritt 3 von 3 -- Räumliche Verknüpfung mit Flurstücken und Gemeinden ...")
-    arcpy.AddMessage("-" * 40)
+    add_step_message(3, 3, "Räumliche Verknüpfung mit Flurstücken und Gemeinden")
     spatial_join_gem_flst(fc_gemeinden, fc_flurstuecke, output_table_name, buffer_size, cfg)
 
     if not keep_temp_data:

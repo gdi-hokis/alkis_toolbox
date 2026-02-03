@@ -4,30 +4,34 @@ from utils import add_step_message
 
 
 def extract_xml_data(ax_objekt, namespaces):
-    veraenderungsnummer = ax_objekt.find(
-        ".zeigtAufExternes/AA_Fachdatenverbindung/fachdatenobjekt/AA_Fachdatenobjekt/name", namespaces
-    )
+    try:
+        veraenderungsnummer = ax_objekt.find(
+            ".zeigtAufExternes/AA_Fachdatenverbindung/fachdatenobjekt/AA_Fachdatenobjekt/name", namespaces
+        )
 
-    #     <zeigtAufExternes>
-    #      <AA_Fachdatenverbindung>
-    #        <art>urn:bw:fdv:1000</art>
-    #        <fachdatenobjekt>
-    #          <AA_Fachdatenobjekt>
-    #            <name>0300201900016V</name>
-    #          </AA_Fachdatenobjekt>
-    #        </fachdatenobjekt>
-    #      </AA_Fachdatenverbindung>
-    #    </zeigtAufExternes>
+        #     <zeigtAufExternes>
+        #      <AA_Fachdatenverbindung>
+        #        <art>urn:bw:fdv:1000</art>
+        #        <fachdatenobjekt>
+        #          <AA_Fachdatenobjekt>
+        #            <name>0300201900016V</name>
+        #          </AA_Fachdatenobjekt>
+        #        </fachdatenobjekt>
+        #      </AA_Fachdatenverbindung>
+        #    </zeigtAufExternes>
 
-    if veraenderungsnummer is not None:
-        veraenderungsnummern = veraenderungsnummer.text.split(";")
-        benoetigte_nummern = set()
-        for vn in veraenderungsnummern:
-            if vn[-1] in ("F", "V"):
-                benoetigte_nummern.add(vn)
+        if veraenderungsnummer is not None:
+            veraenderungsnummern = veraenderungsnummer.text.split(";")
+            benoetigte_nummern = set()
+            for vn in veraenderungsnummern:
+                if vn[-1] in ("F", "V"):
+                    benoetigte_nummern.add(vn)
 
-        veraenderungsnummern_ausgabe = "|".join(benoetigte_nummern)
-        return veraenderungsnummern_ausgabe
+            veraenderungsnummern_ausgabe = "|".join(benoetigte_nummern)
+            return veraenderungsnummern_ausgabe
+    except Exception as e:
+        arcpy.AddError(f"Fehler bei VN-Extraktion: {str(e)}")
+        return False
 
 
 # Daten in ALKIS sde überschreiben
@@ -57,7 +61,7 @@ def finalize_results(database, flurstueck_vn_csv, gebaeude_vn_csv, keep_workdata
 def extract_vn(cfg, nas_folder, output_workspace, scratch_folder, keep_workdata):
     try:
         save_in_gdb = ".gdb" in output_workspace.lower()
-        total_steps = 3
+        total_steps = 2
 
         if not save_in_gdb:
             scratch_folder = output_workspace

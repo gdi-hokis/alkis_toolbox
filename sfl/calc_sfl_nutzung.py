@@ -296,34 +296,33 @@ def finalize_results(cfg, gdb_path, workspace, keep_workdata):
         nutz = cfg["nutzung"]
         flst = cfg["flurstueck"]
 
+        objektart = (nutz["objektart"],)
+        objektname = (nutz["objektname"],)
+        unterart_typ = (nutz["unterart_typ"],)
+        unterart_id = (nutz["unterart_id"],)
+        unterart_kuerzel = (nutz["unterart_kuerzel"],)
+        unterart_name = (nutz["unterart_name"],)
+        eigenname = (nutz["eigenname"],)
+        weitere_nutzung_id = (nutz["weitere_nutzung_id"],)
+        weitere_nutzung_name = (nutz["weitere_nutzung_name"],)
+        klasse = (nutz["klasse"],)
+        flstkennzeichen = (flst["flurstueckskennzeichen"],)
+        afl = (flst["amtliche_flaeche"],)
+
         nutzung_field_mapping = (
-            r'{1} "Objektart" true true false 8 Double 8 38,First,#,{0},{1},-1,-1;'
-            r'{2} "Nutzung" true true false 255 Text 0 0,First,#,{0},{2},0,253;'
-            r'{3} "Unterart Typ" true true false 255 Text 0 0,First,#,{0},{3},0,253;'
-            r'{4} "Unterart Schlüssel" true true false 8 Double 8 38,First,#,{0},{4},-1,-1;'
-            r'{5} "Abkürzung" true true false 10 Text 0 0,First,#,{0},{5},0,49;'
-            r'{6} "Unterart" true true false 255 Text 0 0,First,#,{0},{6},0,253;'
-            r'{7} "Eigenname" true true false 50 Text 0 0,First,#,{0},{7},0,253;'
-            r'{8} "weitere Nutzung Schlüssel" true true false 8 Double 8 38,First,#,{0},{8},0,254;'
-            r'{9} "weitere Nutzung" true true false 255 Text 0 0,First,#,{0},{9},0,253;'
-            r'{10} "Klasse" true true false 8 Double 8 38,First,#,{0},{10},-1,-1;'
-            r'{11} "Flurstückskennzeichen" true true false 255 Text 0 0,First,#,{0},{11},0,253;'
-            r'{12} "Amtliche Fläche [m²]" true true false 4 Long 0 10,First,#,{0},{12},-1,-1;'
-            r'sfl "Fläche [m²]" true true false 4 Long 0 10,First,#,{0},sfl,-1,-1'
-        ).format(
-            nutzung_dissolve,
-            nutz["objektart"],
-            nutz["objektname"],
-            nutz["unterart_typ"],
-            nutz["unterart_id"],
-            nutz["unterart_kuerzel"],
-            nutz["unterart_name"],
-            nutz["eigenname"],
-            nutz["weitere_nutzung_id"],
-            nutz["weitere_nutzung_name"],
-            nutz["klasse"],
-            flst["flurstueckskennzeichen"],
-            flst["amtliche_flaeche"],
+            rf'{objektart} "Objektart" true true false 8 Double 8 38,First,#,{nutzung_dissolve},{objektart},-1,-1;'
+            rf'{objektname} "Nutzung" true true false 255 Text 0 0,First,#,{nutzung_dissolve},{objektname},0,253;'
+            rf'{unterart_typ} "Unterart Typ" true true false 255 Text 0 0,First,#,f{nutzung_dissolve},{unterart_typ},0,253;'
+            rf'{unterart_id} "Unterart Schlüssel" true true false 8 Double 8 38,First,#,{nutzung_dissolve},{unterart_id},-1,-1;'
+            rf'{unterart_kuerzel} "Abkürzung" true true false 10 Text 0 0,First,#,{nutzung_dissolve},{unterart_kuerzel},0,49;'
+            rf'{unterart_name} "Unterart" true true false 255 Text 0 0,First,#,{nutzung_dissolve},{unterart_name},0,253;'
+            rf'{eigenname} "Eigenname" true true false 50 Text 0 0,First,#,{nutzung_dissolve},{eigenname},0,253;'
+            rf'{weitere_nutzung_id} "weitere Nutzung Schlüssel" true true false 8 Double 8 38,First,#,{nutzung_dissolve},{weitere_nutzung_id},0,254;'
+            rf'{weitere_nutzung_name} "weitere Nutzung" true true false 255 Text 0 0,First,#,{nutzung_dissolve},{weitere_nutzung_name},0,253;'
+            rf'{klasse} "Klasse" true true false 8 Double 8 38,First,#,{nutzung_dissolve},{klasse},-1,-1;'
+            rf'{flstkennzeichen} "Flurstückskennzeichen" true true false 255 Text 0 0,First,#,{nutzung_dissolve},{flstkennzeichen},0,253;'
+            rf'{afl} "Amtliche Fläche [m²]" true true false 4 Long 0 10,First,#,{nutzung_dissolve},{afl},-1,-1;'
+            rf'sfl "Fläche [m²]" true true false 4 Long 0 10,First,#,{nutzung_dissolve},sfl,-1,-1'
         )
 
         if not arcpy.Exists(nav_nutzung):
