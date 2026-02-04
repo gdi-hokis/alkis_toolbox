@@ -22,15 +22,15 @@ def copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table
     arcpy.env.workspace = output_gdb
 
     # Schritt 1: csv bereinigen
-    add_step_message(1, 3, "CSV vorbereiten")
+    add_step_message("CSV vorbereiten", 1, 3)
     prepared_csv, abrufdatum = prepare_csv(alkis_csv)
 
     # Schritt 2: Eigentümer-Tabelle erstellen
-    add_step_message(2, 3, "Eigentümer-Tabelle erstellen")
+    add_step_message("Eigentümer-Tabelle erstellen", 2, 3)
     make_eigentuemer_table(prepared_csv, output_gdb, output_table_name, abrufdatum, cfg)
 
     # Schritt 3: räumliche Verknüpfung mit Flurstücken und Gemeinden
-    add_step_message(3, 3, "Räumliche Verknüpfung mit Flurstücken und Gemeinden")
+    add_step_message("Räumliche Verknüpfung mit Flurstücken und Gemeinden", 3, 3)
     spatial_join_gem_flst(fc_gemeinden, fc_flurstuecke, output_table_name, buffer_size, cfg)
 
     if not keep_temp_data:
@@ -120,7 +120,7 @@ def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum, config):
 
             if is_empty:
                 fields_to_delete.append(field.name)
-                arcpy.AddMessage(f"- Leeres Feld '{field.name}' wird entfernt")
+                arcpy.AddMessage(f"- Leeres Feld '{field.name}' wird entfernt...")
 
     if fields_to_delete:
         arcpy.DeleteField_management(owner_table, fields_to_delete)

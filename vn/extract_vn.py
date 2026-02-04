@@ -61,11 +61,11 @@ def finalize_results(database, flurstueck_vn_csv, gebaeude_vn_csv, keep_workdata
 def extract_vn(cfg, nas_folder, output_workspace, scratch_folder, keep_workdata):
     try:
         save_in_gdb = ".gdb" in output_workspace.lower()
-        total_steps = 2
+        total_steps = 3
 
         if not save_in_gdb:
             scratch_folder = output_workspace
-            total_steps = 3
+            total_steps = 2
 
         flurstueck_vn_csv = scratch_folder + os.sep + "fsk_x_vn.csv"  # Pfad zur Ausgabe-CSV-Datei
         gebaeude_vn_csv = scratch_folder + os.sep + "geb_x_vn.csv"  # Pfad zur Ausgabe-CSV-Datei
