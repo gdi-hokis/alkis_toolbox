@@ -66,7 +66,7 @@ Statt Daten manuell über Web-Oberflächen herunterzuladen und separat zu konver
 
 Dieses Werkzeug formatiert die Eigentümer-CSV des LGLs, indem es überflüssige Zeilen entfernt, die Sonderzeichen "&" und "'" decodiert und neue Felder hinzufügt:
 
-- "gemeinde" (für Suchen)
+- "gemeinde_name" (für Suchen)
 - "gemeinden_puffer" (für Sichten - enthält, alle Gemeindenamen kommasepariert, die in einem bestimmten Radius um das Flurstück liegen)
 - "abrufdatum" (aus der CSV-Tabelle übernommen)
 - "fsk" (für die Verknüpfung mit den Flurstücken) - Format aus dem Werkzeug "FSK berechnen"
