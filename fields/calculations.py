@@ -41,7 +41,12 @@ def join_flurnamen(cfg, flurstueck_fc, flur_fc, delete_flur_id):
                 calculate_flur_id(cfg, fc)
 
         arcpy.AddMessage("- Flurnamen mit Flurstücken verknüpfen...")
-        arcpy.JoinField_management(flurstueck_fc, "flur_id", flur_fc, "flur_id", cfg["flur"]["flurname"])
+
+        # Workaround, weil vor dem JOIN die neuen Felder nicht immer sofort erkannt werden
+        flst_path = arcpy.Describe(flurstueck_fc).catalogPath
+        flur_path = arcpy.Describe(flur_fc).catalogPath
+
+        arcpy.JoinField_management(flst_path, "flur_id", flur_path, "flur_id", cfg["flur"]["flurname"])
         if delete_flur_id:
             clean_up_flur_id([flur_fc, flurstueck_fc])
         return True

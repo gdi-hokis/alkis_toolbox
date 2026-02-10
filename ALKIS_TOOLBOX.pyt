@@ -283,26 +283,54 @@ class AlkisEigentuemer:
         )
 
         param4 = arcpy.Parameter(
+            displayName="Abrufdatum",
+            name="date",
+            datatype="GPDate",
+            parameterType="Optional",
+            direction="Input",
+        )
+
+        param5 = arcpy.Parameter(
             displayName="Größe des Puffers [m]",
             name="buffer_size",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input",
         )
-        param4.category = "Weitere Parameter"
-        param4.value = 500
+        param5.category = "Weitere Parameter"
+        param5.value = 500
 
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Verarbeitungsdaten behalten?",
             name="process_data",
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input",
         )
-        param5.category = "Weitere Parameter"
-        param5.value = False
+        param6.category = "Weitere Parameter"
+        param6.value = False
 
-        params = [param0, param1, param2, param3, param4, param5]
+        param7 = arcpy.Parameter(
+            displayName="Anzahl der Anfangszeilen zum Löschen",
+            name="num_leading_lines",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        param7.value = 1
+        param7.category = "Weitere Parameter"
+
+        param8 = arcpy.Parameter(
+            displayName="Anzahl der Endzeilen zum Löschen",
+            name="num_trailing_lines",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        param8.value = 5
+        param8.category = "Weitere Parameter"
+
+        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8]
         return params
 
     def updateMessages(self, parameters):
@@ -312,7 +340,7 @@ class AlkisEigentuemer:
         """
         fc_gemeinden = parameters[1]
         fc_flurstuecke = parameters[2]
-        buffer_size = parameters[4]
+        buffer_size = parameters[5]
 
         # Parameter 2: Feature Class Gemeinden validieren
         utils.check_required_fields(fc_gemeinden, [cfg["gemeinde"]["gemeinde_name"]])
@@ -336,11 +364,23 @@ class AlkisEigentuemer:
         alkis_csv = parameters[0].valueAsText
         fc_gemeinden = parameters[1].value
         fc_flurstuecke = parameters[2].value
+        date = parameters[4].value
         output_table = parameters[3].valueAsText
-        buffer_size = parameters[4].value
-        keep_temp_data = parameters[5].value
+        buffer_size = parameters[5].value
+        keep_temp_data = parameters[6].value
+        num_leading_lines = parameters[7].value
+        num_trailing_lines = parameters[8].value
         owner.copy_alkis_eigentuemer.copy_alkis_eigentuemer(
-            alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data
+            alkis_csv,
+            fc_gemeinden,
+            fc_flurstuecke,
+            output_table,
+            buffer_size,
+            cfg,
+            keep_temp_data,
+            num_leading_lines,
+            num_trailing_lines,
+            date,
         )
         return
 

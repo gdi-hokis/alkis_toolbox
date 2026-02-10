@@ -4,7 +4,18 @@ import arcpy
 from utils import add_step_message
 
 
-def copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table, buffer_size, cfg, keep_temp_data):
+def copy_alkis_eigentuemer(
+    alkis_csv,
+    fc_gemeinden,
+    fc_flurstuecke,
+    output_table,
+    buffer_size,
+    cfg,
+    keep_temp_data,
+    num_leading_lines,
+    num_trailing_lines,
+    date,
+):
     """
     Hauptlogik zum Kopieren der ALKIS-Eigentümerdaten aus der CSV in eine ArcGIS-Tabelle
     :param alkis_csv: Pfad zur ALKIS-Eigentümer-CSV-Datei
@@ -23,7 +34,7 @@ def copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table
 
     # Schritt 1: csv bereinigen
     add_step_message("CSV vorbereiten", 1, 3)
-    prepared_csv, abrufdatum = prepare_csv(alkis_csv)
+    prepared_csv, abrufdatum = prepare_csv(alkis_csv, num_leading_lines, num_trailing_lines, date)
 
     # Schritt 2: Eigentümer-Tabelle erstellen
     add_step_message("Eigentümer-Tabelle erstellen", 2, 3)
@@ -41,7 +52,7 @@ def copy_alkis_eigentuemer(alkis_csv, fc_gemeinden, fc_flurstuecke, output_table
         os.remove(prepared_csv)
 
 
-def prepare_csv(input_csv):
+def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, date):
     """
     entfernt die erste und die letzten fünf Zeilen (header und Codeerklärungen)
     speichert die bereinigte CSV in einer temporären Datei (im gleichen Verzeichnis wie input_csv)
@@ -56,15 +67,21 @@ def prepare_csv(input_csv):
         lines = f.readlines()
 
     # Extrahiere Abrufdatum aus der ersten Zeile
-    try:
-        abrufdatum = lines[0][19:29]
-        # Validiere Datumsformat DD.MM.YYYY
-        datetime.strptime(abrufdatum, "%d.%m.%Y")
-    except:
-        arcpy.AddError("Fehler beim Auslesen des Abrufdatums aus der CSV-Datei.")
-        raise
-    # Entferne die erste und letzten fünf Zeilen
-    lines = lines[1:-5]
+    if not date:
+        try:
+            abrufdatum = lines[0][19:29]
+            # Validiere Datumsformat DD.MM.YYYY
+            datetime.strptime(abrufdatum, "%d.%m.%Y")
+        except:
+            arcpy.AddError(
+                "Fehler beim Auslesen des Abrufdatums aus der CSV-Datei. Bitte füllen Sie den Parameter 'Abrufdatum'."
+            )
+            raise
+    else:
+        abrufdatum = date.strftime("%d.%m.%Y")
+    # Entferne die Anfangs- und letzten End-Zeilen
+    end_lines_index = -num_trailing_lines
+    lines = lines[num_leading_lines:end_lines_index]
 
     # Ersetze fehlerhafte HTML-Entity-Kodierungen und Encoding-Fehler
     decoded_lines = []
@@ -76,8 +93,7 @@ def prepare_csv(input_csv):
         line = line.replace("&amp;", "&")
         line = line.replace("&amp ", "&")
 
-        # Encoding-Fehler beheben: Direkte Ersetzung der fehlerhaften Muster
-        # UTF-8 als Latin-1 interpretiert
+        # UTF-8 als Latin-1 interpretiert - nur für Öffnen der CSV in Excel notwendig, im ArcGIS Pro eig. nicht benötigt
         mojibake_map = {"Ã¼": "ü", "Ã¶": "ö", "Ã¤": "ä", "ÃŸ": "ß", "Ã": "Ü", "Ã–": "Ö", "Ã„": "Ä", "Â": " "}
         for wrong, correct in mojibake_map.items():
             line = line.replace(wrong, correct)
@@ -196,7 +212,6 @@ def spatial_join_gem_flst(gem, flst, owner_table, buffer_size, config):
 
     # Gemeinde von Flurstücken joinen
     arcpy.JoinField_management(owner_table, join_field, flst, join_field, ["gemeinde_name"])
-    arcpy.AlterField_management(owner_table, "gemeinde_name", new_field_name="gemeinde", new_field_alias="Gemeinde")
 
     # Gemeinden aus Spatial Join hinzufügen
     arcpy.JoinField_management(owner_table, join_field, "v_al_flurstueck_SpatialJoin", join_field, ["gemeinden_puffer"])

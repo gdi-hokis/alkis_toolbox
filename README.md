@@ -9,6 +9,33 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 3. zu heruntergeladenen Daten navigieren und die Datei 'ALKIS_TOOLBOX.pyt' auswählen; dieses erscheint dann im ArcGIS Pro Katalog unter 'Toolboxen'
 4. 'ALIKS_TOOLBOX.pyt' aufklappen und die verschiedenen Werkzeuge mit Doppelklick öffnen
 
+## Empfohlene Reihenfolge der Schritte
+
+1. WFS-Download
+
+**Eigentümer**
+
+1. FSK berechnen - Voraussetzung für Eigentümer-CSV
+2. Eigentümer-CSV formatieren
+
+**Flurstücksverschnitte**
+
+1. Verschnitt Flurstück und Lage
+2. Verschnitt Flurstück und Nutzung - Voraussetzung für Verschnitt Bodenschätzung
+3. Verschnitt Flurstück und Bodenschätzung
+
+**Locator**
+
+1. Flurnamen zuordnen - Voraussetzung für Ortsnamen berechnen
+2. Ortsnamen berechnen - Voraussetzung für Locator
+3. Locator erstellen/aktualisieren
+
+**sonstige Werkzeuge (Reihenfolge egal)**
+
+- FLSTKEY berechnen (optional)
+- Beschriftung Bodenschätzung berechnen (optional)
+- Veränderungsnummern aus NAS auslesen (optional)
+
 ## Tools
 
 ### WFS Download
