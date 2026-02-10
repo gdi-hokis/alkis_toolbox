@@ -7,7 +7,7 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 1. Daten aus Github-Repository herunterladen und lokal speichern
 2. Im ArcGIS Pro Katalog Rechtsklick auf 'Toolboxen'->'Toolbox hinzufügen'
 3. zu heruntergeladenen Daten navigieren und die Datei 'ALKIS_TOOLBOX.pyt' auswählen; dieses erscheint dann im ArcGIS Pro Katalog unter 'Toolboxen'
-4. 'ALIKS_TOOLBOX.pyt' aufklappen und die verschiedenen Werkzeuge mit Doppelklick öffnen
+4. 'ALKIS_TOOLBOX.pyt' aufklappen und die verschiedenen Werkzeuge mit Doppelklick öffnen
 
 ## Empfohlene Reihenfolge der Schritte
 
