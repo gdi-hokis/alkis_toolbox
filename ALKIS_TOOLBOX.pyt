@@ -284,7 +284,7 @@ class AlkisEigentuemer:
 
         param4 = arcpy.Parameter(
             displayName="Abrufdatum",
-            name="date",
+            name="access_date",
             datatype="GPDate",
             parameterType="Optional",
             direction="Input",

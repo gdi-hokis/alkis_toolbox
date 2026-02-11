@@ -14,7 +14,7 @@ def copy_alkis_eigentuemer(
     keep_temp_data,
     num_leading_lines,
     num_trailing_lines,
-    date,
+    access_date,
 ):
     """
     Hauptlogik zum Kopieren der ALKIS-Eigentümerdaten aus der CSV in eine ArcGIS-Tabelle
@@ -25,6 +25,9 @@ def copy_alkis_eigentuemer(
     :param buffer_size: Puffergröße in Metern für die räumliche Verknüpfung
     :param cfg: Konfigurationsparameter
     :param keep_temp_data: Bool, ob temporäre Daten behalten werden sollen
+    :param num_leading_lines: Anzahl der zu entfernenden Zeilen am Anfang der CSV
+    :param num_trailing_lines: Anzahl der zu entfernenden Zeilen am Ende der CSV
+    :param access_date: Abrufdatum als datetime-Objekt oder None
     """
     # Pfad in GDB und Tabellenname zerlegen
     output_gdb = os.path.dirname(output_table)
@@ -34,7 +37,7 @@ def copy_alkis_eigentuemer(
 
     # Schritt 1: csv bereinigen
     add_step_message("CSV vorbereiten", 1, 3)
-    prepared_csv, abrufdatum = prepare_csv(alkis_csv, num_leading_lines, num_trailing_lines, date)
+    prepared_csv, abrufdatum = prepare_csv(alkis_csv, num_leading_lines, num_trailing_lines, access_date)
 
     # Schritt 2: Eigentümer-Tabelle erstellen
     add_step_message("Eigentümer-Tabelle erstellen", 2, 3)
@@ -52,11 +55,14 @@ def copy_alkis_eigentuemer(
         os.remove(prepared_csv)
 
 
-def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, date):
+def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, access_date):
     """
     entfernt die erste und die letzten fünf Zeilen (header und Codeerklärungen)
     speichert die bereinigte CSV in einer temporären Datei (im gleichen Verzeichnis wie input_csv)
     :param input_csv: Pfad zur Eingabe-CSV-Datei
+    :param num_leading_lines: Anzahl der zu entfernenden Zeilen am Anfang der CSV
+    :param num_trailing_lines: Anzahl der zu entfernenden Zeilen am Ende der CSV
+    :param access_date: Abrufdatum als datetime-Objekt oder None
     """
     encoding = "utf-8"
 
@@ -67,7 +73,7 @@ def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, date):
         lines = f.readlines()
 
     # Extrahiere Abrufdatum aus der ersten Zeile
-    if not date:
+    if not access_date:
         try:
             abrufdatum = lines[0][19:29]
             # Validiere Datumsformat DD.MM.YYYY
@@ -78,7 +84,7 @@ def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, date):
             )
             raise
     else:
-        abrufdatum = date.strftime("%d.%m.%Y")
+        abrufdatum = access_date.strftime("%d.%m.%Y")
     # Entferne die Anfangs- und letzten End-Zeilen
     end_lines_index = -num_trailing_lines
     lines = lines[num_leading_lines:end_lines_index]
