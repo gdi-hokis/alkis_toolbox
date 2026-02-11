@@ -1,0 +1,127 @@
+{
+	"alkis_layers": {
+		"flurstueck": "nora_v_al_flurstueck",
+		"nutzung": "nora_v_al_tatsaechliche_nutzung",
+		"bodenschaetzung": "nora_v_al_bodenschaetzung_f",
+		"bewertung": "nora_v_al_bodenbewertung",
+		"lagebezeichnung": "nora_v_al_lagebezeichnung",
+		"gebaeude": "nora_v_al_gebaeude",
+		"strasse_gewann": "nora_v_al_strasse_gewann"
+	},
+
+	"flurstueck": {
+		"flurstueckskennzeichen": "flurstueckskennzeichen",
+		"shape": "SHAPE@",
+		"shape_area": "SHAPE@AREA",
+		"shape_length": "SHAPE@LENGTH",
+		"amtliche_flaeche": "amtliche_flaeche",
+		"gemarkung_id": "gemarkung_id",
+		"gemarkung_name": "gemarkung_name",
+		"flurnummer": "flurnummer",
+		"flurstueckstext": "flurstueckstext",
+		"objectid": "OBJECTID",
+		"gemeinde_name": "gemeinde_name"
+	},
+
+	"flur": { "flurname": "flurname" },
+
+	"lagebezeichnung": {
+		"hausnummer": "hausnummer",
+		"lage_id": "lage_id",
+		"lagebezeichnung": "lagebezeichnung",
+		"gesamtschluessel": "gesamtschluessel",
+		"lageschluessel": "lageschluessel",
+		"nummer": "nummer",
+		"zusatz": "zusatz"
+	},
+
+	"gebaeude": {
+		"gebaeudefunktion_name": "gebaeudefunktion_name",
+		"object_id": "object_id"
+	},
+
+	"nutzung": {
+		"objektart": "objektart",
+		"objektname": "objektname",
+		"unterart_typ": "unterart_typ",
+		"unterart_id": "unterart_id",
+		"unterart_kuerzel": "unterart_kuerzel",
+		"unterart_name": "unterart_name",
+		"eigenname": "eigenname",
+		"weitere_nutzung_id": "weitere_nutzung_id",
+		"weitere_nutzung_name": "weitere_nutzung_name",
+		"klasse": "klasse"
+	},
+
+	"bodenschaetzung": {
+		"bodenart_id": "bodenart_id",
+		"bodenart_name": "bodenart_name",
+		"nutzungsart_id": "nutzungsart_id",
+		"nutzungsart_name": "nutzungsart_name",
+		"entstehung_id": "entstehung_id",
+		"entstehung_name": "entstehung_name",
+		"klima_id": "klima_id",
+		"klima_name": "klima_name",
+		"wasser_id": "wasser_id",
+		"wasser_name": "wasser_name",
+		"bodenstufe_id": "bodenstufe_id",
+		"bodenstufe_name": "bodenstufe_name",
+		"zustand_id": "zustand_id",
+		"zustand_name": "zustand_name",
+		"sonstige_angaben_id": "sonstige_angaben_id",
+		"sonstige_angaben_name": "sonstige_angaben_name",
+		"bodenzahl": "bodenzahl",
+		"ackerzahl": "ackerzahl"
+	},
+
+	"bewertung": {
+		"klassifizierung_id": "klassifizierung_id",
+		"klassifizierung_name": "klassifizierung_name"
+	},
+
+	"eigentuemer": {
+		"flst": "Flurstueck",
+		"fkz": "FKZ",
+		"fsk": "fsk"
+	},
+
+	"gemeinde": {
+		"gemeinde_name": "gemeinde_name"
+	},
+
+	"wfs_config": {
+		"wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
+		"params_capabilities": {
+			"service": "WFS",
+			"request": "GetCapabilities",
+			"version": "2.0.0"
+		},
+		"params_feature": {
+			"service": "WFS",
+			"request": "GetFeature",
+			"version": "2.0.0",
+			"outputFormat": "json"
+		},
+		"identify_fields": ["gml_id", "gesamtschluessel"]
+	},
+
+	"nas": {
+		"namespaces": {
+			"": "http://www.adv-online.de/namespaces/adv/gid/7.1",
+			"ak": "http://www.adv-online.de/namespaces/adv/aaa-ak/2.0",
+			"gml": "http://www.opengis.net/gml/3.2",
+			"gmd": "http://www.isotc211.org/2005/gmd",
+			"gmlexr": "http://www.opengis.net/gml/3.3/exr",
+			"ows": "http://www.opengis.net/ows/1.1",
+			"wfs": "http://www.opengis.net/wfs/2.0",
+			"wfsext": "http://www.adv-online.de/namespaces/adv/gid/wfsext/2.0",
+			"fes": "http://www.opengis.net/fes/2.0",
+			"xlink": "http://www.w3.org/1999/xlink",
+			"xsi": "http://www.w3.org/2001/XMLSchema-instance",
+			"gco": "http://www.isotc211.org/2005/gco",
+			"ext": "http://www.supportgis.de/cpa",
+			"cpa": "http://www.cpa-systems.de/namespaces/adv/gid/7.1",
+			"adv": "http://www.adv-online.de/namespaces/adv/gid/7.1"
+		}
+	}
+}
