@@ -63,6 +63,7 @@ class Toolbox:
             CalcBodenschaetzungLabel,
             AlkisEigentuemer,
             CreateOverwriteLocator,
+            CalculateAssignmentArrows
         ]
 
 
@@ -1190,3 +1191,58 @@ class CreateOverwriteLocator:
         locator.build_update_locator.build_update_locator(
             cfg, flst_layer, output_folder, locator_local, locator_item, overwrite_service, publish_service
         )
+
+class CalculateAssignmentArrows:
+    def __init__(self):
+        self.label = "Zuordnungspfeile berechnen"
+        self.description = "Berechnet Zuordnungspfeile zwischen Präsentationsobjekten und Flurstücken"
+        self.category = "Zuordnungspfeile"
+
+    def getParameterInfo(self):
+        param0 = arcpy.Parameter(
+            displayName="Beschriftungspunkte DKKM 1000",
+            name="label_points_1000_fc",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input"
+        )
+        param1 = arcpy.Parameter(
+            displayName="Beschriftungspunkte DKKM 2000",
+            name="label_points_2000_fc",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input"
+        )
+        param2 = arcpy.Parameter(
+            displayName="Flurstücke",
+            name="parcels_fc",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input"
+        )
+        param3 = arcpy.Parameter(
+            displayName="Ziel-Geodatabase wählen",
+            name="output_workspace",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input"
+        )
+
+        params = [param0, param1, param2, param3]
+        return params
+    
+    def execute(self, parameters, _messages):
+        import assignment_arrows.calculate_assignment_arrows
+
+        label_points_1000_fc               = parameters[0].valueAsText
+        label_points_2000_fc               = parameters[1].valueAsText
+        parcels_fc                         = parameters[2].valueAsText
+        output_workspace                   = parameters[3].valueAsText
+
+        assignment_arrows.calculate_assignment_arrows.generate_assignment_arrows( 
+            label_points_1000_fc, 
+            label_points_2000_fc, 
+            parcels_fc, 
+            output_workspace
+        )
+

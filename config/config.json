@@ -6,7 +6,9 @@
 		"bewertung": "nora_v_al_bodenbewertung",
 		"lagebezeichnung": "nora_v_al_lagebezeichnung",
 		"gebaeude": "nora_v_al_gebaeude",
-		"strasse_gewann": "nora_v_al_strasse_gewann"
+		"strasse_gewann": "nora_v_al_strasse_gewann",
+		"label_nummer_1000": "nora_v_al_label_nummer1",
+		"label_nummer_2000": "nora_v_al_label_nummer2"
 	},
 
 	"flurstueck": {
