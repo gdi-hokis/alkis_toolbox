@@ -91,6 +91,12 @@
 		"gemeinde_name": "gemeinde_name"
 	},
 
+	"beschriftungspunkte": {
+		"inhalt": "inhalt",
+		"drehwinkel": "drehwinkel",
+		"referenz_gml_id": "referenz_gml_id"
+	},
+
 	"wfs_config": {
 		"wfs_url": "https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_LGL-BW_ALKIS",
 		"params_capabilities": {

@@ -305,9 +305,13 @@ Beschriftungspunkte können außerhalb ihres zugehörigen Flurstücks positionie
 
 **Eingabedaten:**
 
-- Beschriftungspunkte DKKM 1000 (label_nummer1)
-- Beschriftungspunkte DKKM 2000 (label_nummer2)
-- Flurstücke
+- FeatureClass Beschriftungspunkte  DKKM 1000 (label_nummer1)
+- FeatureClass Beschriftungspunkte DKKM 2000 (label_nummer2)
+- FeatureClass Flurstücke
+- Suchdistanz für Treffersuche (m)
+- Mindestlänge der Zuordnungspfeile (m)
+- Maximallänge der Zuordnungspfeile (m)
+- Ziel-Geodatabase
 
 **Ablauf:**
 

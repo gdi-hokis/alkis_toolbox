@@ -1206,6 +1206,7 @@ class CalculateAssignmentArrows:
             parameterType="Required",
             direction="Input"
         )
+
         param1 = arcpy.Parameter(
             displayName="Beschriftungspunkte DKKM 2000",
             name="label_points_2000_fc",
@@ -1213,6 +1214,7 @@ class CalculateAssignmentArrows:
             parameterType="Required",
             direction="Input"
         )
+
         param2 = arcpy.Parameter(
             displayName="Flurstücke",
             name="parcels_fc",
@@ -1220,16 +1222,72 @@ class CalculateAssignmentArrows:
             parameterType="Required",
             direction="Input"
         )
+
         param3 = arcpy.Parameter(
+            displayName="Maximale Suchdistanz für Treffersuche (m)",
+            name="matching_search_distance",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input"
+        )
+        param3.value = 200
+
+        param4 = arcpy.Parameter(
+            displayName="Mindestlänge der Zuordnungspfeile (m)",
+            name="min_arrow_length",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input"
+        )
+        param4.value = 1
+
+        param5 = arcpy.Parameter(
+            displayName="Maximallänge der Zuordnungspfeile (m)",
+            name="max_arrow_length",
+            datatype="GPDouble",
+            parameterType="Required",
+            direction="Input"
+        )
+        param5.value = 35
+
+        param6 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
             name="output_workspace",
             datatype="DEWorkspace",
             parameterType="Required",
             direction="Input"
         )
+        param6.filter.list = ["File Geodatabase"]
 
-        params = [param0, param1, param2, param3]
+        params = [param0, param1, param2, param3, param4, param5, param6]
         return params
+    
+    def updateMessages(self, parameters):
+        utils.warn_overwriting_existing_layers(parameters[6], ["Zuordnungspfeile"])
+
+        # Prüfe Koordinatensystem
+        expected_wkid = 25832
+        expected_name = "ETRS89 / UTM zone 32N"
+        input_params = [parameters[0], parameters[1], parameters[2]]
+        for param in input_params:
+            if param.datatype == "GPFeatureLayer" and param.value:
+                spatial_reference = arcpy.Describe(param.valueAsText).spatialReference
+                if not spatial_reference or spatial_reference.factoryCode != expected_wkid:
+                    param.setErrorMessage(f"Das Eingabedataset muss im Koordinatensystem {expected_name} (EPGS:{expected_wkid})")
+
+        # Prüfe erforderliche Felder
+        for param in [parameters[0], parameters[1]]:
+            if param.valueAsText:
+                utils.check_required_fields(
+                    param, 
+                    [
+                        cfg["beschriftungspunkte"]["inhalt"],
+                        cfg["beschriftungspunkte"]["drehwinkel"],
+                        cfg["beschriftungspunkte"]["referenz_gml_id"]
+                    ]
+                )
+        if parameters[0].valueAsText:
+            utils.check_required_fields(parameters[2], [cfg["flurstueck"]["flurstueckstext"]])
     
     def execute(self, parameters, _messages):
         import assignment_arrows.calculate_assignment_arrows
@@ -1237,12 +1295,19 @@ class CalculateAssignmentArrows:
         label_points_1000_fc               = parameters[0].valueAsText
         label_points_2000_fc               = parameters[1].valueAsText
         parcels_fc                         = parameters[2].valueAsText
-        output_workspace                   = parameters[3].valueAsText
+        matching_search_distance           = parameters[3].value
+        min_arrow_length                   = parameters[4].value
+        max_arrow_length                   = parameters[5].value
+        output_workspace                   = parameters[6].valueAsText
 
         assignment_arrows.calculate_assignment_arrows.generate_assignment_arrows( 
+            cfg,
             label_points_1000_fc, 
             label_points_2000_fc, 
             parcels_fc, 
+            matching_search_distance,
+            min_arrow_length,
+            max_arrow_length,
             output_workspace
         )
 

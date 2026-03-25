@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-import arcpy, math, os
+import arcpy
+import math
+import os
 from collections import defaultdict
 from utils import add_step_message
 
@@ -48,15 +50,15 @@ def parse_parcel_text(text):
     """
     if not text:
         return (None, None)
-    striped_text = str(text).strip()
-    if "/" in striped_text:
-        parts = striped_text.split("/")
+    stripped_text = str(text).strip()
+    if "/" in stripped_text:
+        parts = stripped_text.split("/")
         if len(parts) == 2:
             return normalize_part(parts[0]), normalize_part(parts[1])
         return (None, None)
-    if striped_text.startswith("/"):
-        return (None, normalize_part(striped_text[1:]))
-    return normalize_part(striped_text), None
+    if stripped_text.startswith("/"):
+        return (None, normalize_part(stripped_text[1:]))
+    return normalize_part(stripped_text), None
 
 def parcel_match_score(parcel_counter, parcel_denominator, label_counter, label_denominator):
     # Bewertungsfunktion für Übereinstimmung von Flurstücken
@@ -100,11 +102,11 @@ def dist(x1, y1, x2, y2):
     # Distanzberechnung zwischen zwei Punkten
     return math.hypot(x2 - x1, y2 - y1)
 
-def load_labels(label_fc):
+def load_labels(config, label_fc):
     # Laden der Beschriftungspunkte
     labels = []
     where = "art = 'ZAE_NEN'"
-    with arcpy.da.SearchCursor(label_fc, ["OID@", "SHAPE@", "inhalt", "drehwinkel", "referenz_gml_id"], where) as search_cursor:
+    with arcpy.da.SearchCursor(label_fc, ["OID@", "SHAPE@", config["beschriftungspunkte"]["inhalt"], config["beschriftungspunkte"]["drehwinkel"], config["beschriftungspunkte"]["referenz_gml_id"]], where) as search_cursor:
         for objectid, geometry, text, rotation, gml in search_cursor:
             point = geometry.firstPoint
             counter, denominator = parse_parcel_text(text)
@@ -121,10 +123,10 @@ def load_labels(label_fc):
             })
     return labels
 
-def load_parcels(parcel_fc):
+def load_parcels(config, parcel_fc):
     # Laden der Flurstücke
     parcels = []
-    with arcpy.da.SearchCursor(parcel_fc, ["OID@", "SHAPE@", "flurstueckstext"]) as cursor:
+    with arcpy.da.SearchCursor(parcel_fc, ["OID@", "SHAPE@", config["flurstueck"]["flurstueckstext"]]) as cursor:
         for objectid, geometry, text in cursor:
             centroid = geometry.labelPoint
             counter, denominator = parse_parcel_text(text)
@@ -183,16 +185,22 @@ def build_spatial_index(parcels, search_distance):
 
 def spatial_join_labels_to_parcels(label_fc, parcel_fc):
     # Ermittlung, welche Beschriftungen in welchem Flurstück liegen
-    temp_layer = "in_memory\\parcel_label_join"
-    arcpy.management.MakeFeatureLayer(parcel_fc, "parcel_lyr")
-    arcpy.management.MakeFeatureLayer(label_fc, "label_lyr", "art = 'ZAE_NEN'")
-    arcpy.analysis.SpatialJoin("parcel_lyr", "label_lyr", temp_layer, "JOIN_ONE_TO_MANY", match_option="CONTAINS")
+    temp_join_layer = "in_memory\\parcel_label_join"
+    parcel_feature_layer = "parcels"
+    label_feature_layer = "labels"
     mapping = defaultdict(list)
-    with arcpy.da.SearchCursor(temp_layer, ["TARGET_FID", "JOIN_FID"]) as cursor:
-        for parcel_objectid, label_objectid in cursor:
-            if label_objectid != -1:
-                mapping[label_objectid].append(parcel_objectid)
-    arcpy.management.Delete(temp_layer)
+    try:
+        arcpy.management.MakeFeatureLayer(parcel_fc, parcel_feature_layer)
+        arcpy.management.MakeFeatureLayer(label_fc, label_feature_layer, "art = 'ZAE_NEN'")
+        arcpy.analysis.SpatialJoin(parcel_feature_layer, label_feature_layer, temp_join_layer, "JOIN_ONE_TO_MANY", match_option="CONTAINS")
+        with arcpy.da.SearchCursor(temp_join_layer, ["TARGET_FID", "JOIN_FID"]) as cursor:
+            for parcel_objectid, label_objectid in cursor:
+                if label_objectid != -1:
+                    mapping[label_objectid].append(parcel_objectid)
+    finally:
+        for dataset in (temp_join_layer, parcel_feature_layer, label_feature_layer):
+            if arcpy.Exists(dataset):
+                arcpy.management.Delete(dataset)
     return mapping
 
 def build_parcels_with_labels(label_to_parcel):
@@ -258,7 +266,7 @@ def find_nearest_1000_label(label_2000, idx_1000_gml):
             best_distance = distance
     return best
 
-def create_output_featureclass(workspace, fc_name):
+def create_output_featureclass(workspace, fc_name, spatial_reference):
     # Erstellung der Ausgabe FeatureClass
     arcpy.env.overwriteOutput = True
     fc_path = os.path.join(workspace, fc_name)
@@ -269,14 +277,14 @@ def create_output_featureclass(workspace, fc_name):
     if arcpy.Exists(fc_path):
         arcpy.management.TruncateTable(fc_path)
     else:
-        arcpy.management.CreateFeatureclass(workspace, fc_name, "POLYLINE", spatial_reference=arcpy.SpatialReference(25832))
+        arcpy.management.CreateFeatureclass(workspace, fc_name, "POLYLINE", spatial_reference=spatial_reference)
     existing_fields = [field.name for field in arcpy.ListFields(fc_path)]
     for field_name, field_type, field_length, field_alias in required_fields:
         if field_name not in existing_fields:
             arcpy.management.AddField(fc_path, field_name, field_type, field_length=field_length, field_alias=field_alias)
     return fc_path
 
-def create_label_bbox(label, font_size, scale, buffer):
+def create_label_bbox(label, font_size, scale, buffer, spatial_reference):
     # Erstellt eine BoundingBox um die Beschriftung
     point_to_mm = 0.352778
     mm_to_m = 0.001
@@ -316,7 +324,7 @@ def create_label_bbox(label, font_size, scale, buffer):
         rx = cx * cos_theta - cy * sin_theta
         ry = cx * sin_theta + cy * cos_theta
         points.append(arcpy.Point(label["x"] + rx, label["y"] + ry))
-    return arcpy.Polygon(arcpy.Array(points), arcpy.SpatialReference(25832))
+    return arcpy.Polygon(arcpy.Array(points), spatial_reference)
 
 def segment_intersection(p1, p2, p3, p4):
     # Berechnet Schnittpunkt zwischen Basis Zuordnungspfeil und BoundingBox für den Startpunkt
@@ -335,9 +343,9 @@ def segment_intersection(p1, p2, p3, p4):
         return arcpy.Point(ix, iy)
     return None
 
-def compute_offset_using_bbox(start_point, end_point, label, font_size, scale, buffer):
+def compute_offset_using_bbox(start_point, end_point, label, font_size, scale, buffer, spatial_reference):
     # Berechnet Startversatz des Pfeils außerhalb der Labelbox
-    bbox = create_label_bbox(label, font_size, scale, buffer)
+    bbox = create_label_bbox(label, font_size, scale, buffer, spatial_reference)
     parts = bbox.boundary().getPart(0)
     edges = []
     for i in range(parts.count - 1):
@@ -360,33 +368,35 @@ def compute_form_index(parcel):
         return 1
     return (4 * math.pi * area) / (perimeter * perimeter)
 
-def set_start_and_end(start_point, end_point, parcel):
+def set_start_and_end(start_point, end_point, parcel, minimum_form_index_for_compact_parcels, maximum_distance_between_compact_parcel_points, buffer_distance_compact_parcels, buffer_distance_narrow_parcels):
     # Bestimmt Start und Endpunkt des Zuordnungspfeiles
     distance_between = dist(start_point.X, start_point.Y, end_point.X, end_point.Y)
     form_index = compute_form_index(parcel)
-    if distance_between < 7.5 or form_index > 0.35:
+    if form_index > minimum_form_index_for_compact_parcels:
+        if distance_between < maximum_distance_between_compact_parcel_points:
+            return start_point, end_point   
+        else: 
+           parcel_inner_buffer = parcel["geometry"].buffer(buffer_distance_compact_parcels) 
+    else:
+        parcel_inner_buffer = parcel["geometry"].buffer(buffer_distance_narrow_parcels)
+    if parcel_inner_buffer and parcel_inner_buffer.area > 0:
+        inner_boundary = parcel_inner_buffer.boundary()
+    else:
+        inner_boundary = parcel["geometry"].boundary()
+    start_geometry = arcpy.PointGeometry(start_point, parcel["geometry"].spatialReference)
+    nearest_point, _, _, _ = inner_boundary.queryPointAndDistance(start_geometry)
+    nearest_point = nearest_point.firstPoint
+    distance_between_new = dist(start_point.X, start_point.Y, nearest_point.X, nearest_point.Y)
+    if distance_between_new > distance_between:
         return start_point, end_point
     else:
-        parcel_inner_buffer = parcel["geometry"].buffer(-0.3)
-        if parcel_inner_buffer and parcel_inner_buffer.area > 0:
-            inner_boundary = parcel_inner_buffer.boundary()
-        else:
-            inner_boundary = parcel["geometry"].boundary()
-        start_geom = arcpy.PointGeometry(start_point, parcel["geometry"].spatialReference)
-        nearest_point, _, _, _ = inner_boundary.queryPointAndDistance(start_geom)
-        nearest_point = nearest_point.firstPoint
-        distance_between_new = dist(start_point.X, start_point.Y, nearest_point.X, nearest_point.Y)
-        if distance_between_new > distance_between:
-            return start_point, end_point
-        else:
-            return start_point, nearest_point    
+        return start_point, nearest_point   
 
-def generate_assignment_arrows(label_points_1000_fc, label_points_2000_fc, parcels_fc, output_workspace):
+def generate_assignment_arrows(config, label_points_1000_fc, label_points_2000_fc, parcels_fc, MATCHING_SEARCH_DISTANCE, MIN_ARROW_LENGTH, MAX_ARROW_LENGTH, output_workspace):
     arcpy.env.overwriteOutput = True
-    MATCHING_SEARCH_DISTANCE = 200
-    parcels = load_parcels(parcels_fc)
-    labels_1000 = load_labels(label_points_1000_fc)
-    labels_2000 = load_labels(label_points_2000_fc)
+    parcels = load_parcels(config, parcels_fc)
+    labels_1000 = load_labels(config, label_points_1000_fc)
+    labels_2000 = load_labels(config, label_points_2000_fc)
     labels_1000 = sorted(labels_1000, key=label_match_priority, reverse=True)
     labels_2000 = sorted(labels_2000, key=label_match_priority, reverse=True)
     parcel_indices = build_parcel_indices(parcels)
@@ -396,58 +406,70 @@ def generate_assignment_arrows(label_points_1000_fc, label_points_2000_fc, parce
     label2000_to_parcel = spatial_join_labels_to_parcels(label_points_2000_fc, parcels_fc)
     parcels_with_labels_1000 = build_parcels_with_labels(label1000_to_parcel)
     parcels_with_labels_2000 = build_parcels_with_labels(label2000_to_parcel)
-    spatial_reference=arcpy.SpatialReference(25832)
+    spatial_reference=arcpy.Describe(parcels_fc).spatialReference
+    FONT_SIZE_250 = 9.0
+    BUFFER_FACTOR_250 = 1.25
+    FONT_SIZE_500 = 9.0
+    BUFFER_FACTOR_500 = 1.2
+    FONT_SIZE_1000 = 8.0
+    BUFFER_FACTOR_1000 = 1.15
+    FONT_SIZE_2000 = 7.0
+    BUFFER_FACTOR_2000 = 1.1
     SCALE_CONFIG = [
-        (250, labels_1000, label1000_to_parcel, parcels_with_labels_1000, 9.0, 1.25),
-        (500, labels_1000, label1000_to_parcel, parcels_with_labels_1000, 9.0, 1.2),
-        (1000, labels_1000, label1000_to_parcel, parcels_with_labels_1000, 8.0, 1.15),
-        (2000, labels_2000, label2000_to_parcel, parcels_with_labels_2000, 7.0, 1.1)
+        (250, labels_1000, label1000_to_parcel, parcels_with_labels_1000, FONT_SIZE_250, BUFFER_FACTOR_250),
+        (500, labels_1000, label1000_to_parcel, parcels_with_labels_1000, FONT_SIZE_500, BUFFER_FACTOR_500),
+        (1000, labels_1000, label1000_to_parcel, parcels_with_labels_1000, FONT_SIZE_1000, BUFFER_FACTOR_1000),
+        (2000, labels_2000, label2000_to_parcel, parcels_with_labels_2000, FONT_SIZE_2000, BUFFER_FACTOR_2000)
     ]
     arrow_gml_tracking = {}
     out_fc_name = "Zuordnungspfeile"
-    out_fc = create_output_featureclass(output_workspace, out_fc_name)
+    out_fc = create_output_featureclass(output_workspace, out_fc_name, spatial_reference)
     for step, (scale, labels, label_map, parcels_with_labels, font_size, buffer) in enumerate(SCALE_CONFIG, 1):
         add_step_message(f"Generiere Zuordnungspfeile für den Maßstab 1:{scale}", step, 4)
         used_parcels = set()
         count = 0
         with arcpy.da.InsertCursor(out_fc, ["SHAPE@", "scale", "referenz_gml_id"]) as insert_cursor:
             for label in labels:
-                    if check_label_inside_matching_parcel(label, label_map, parcel_indices):
-                        continue
-                    parcel = find_nearest_matching_parcel(label, spatial_index, label_map, parcels_with_labels, used_parcels)
-                    if not parcel:
-                        continue
-                    start_point = label["geometry"].firstPoint
-                    gml = label["referenz_gml_id"]
-                    if scale == 2000:
-                        if gml and gml in arrow_gml_tracking:
-                            end_point = arrow_gml_tracking[gml]
-                        else:
-                            nearest_label = find_nearest_1000_label(label, idx_1000_gml)
-                            if not nearest_label:
-                                continue
-                            end_point = nearest_label["geometry"].firstPoint
+                if check_label_inside_matching_parcel(label, label_map, parcel_indices):
+                    continue
+                parcel = find_nearest_matching_parcel(label, spatial_index, label_map, parcels_with_labels, used_parcels)
+                if not parcel:
+                    continue
+                start_point = label["geometry"].firstPoint
+                gml = label["referenz_gml_id"]
+                if scale == 2000:
+                    if gml and gml in arrow_gml_tracking:
+                        end_point = arrow_gml_tracking[gml]
                     else:
-                        end_point = parcel["centroid"]
-                    start_point, end_point = set_start_and_end(start_point, end_point, parcel)
-                    offset = compute_offset_using_bbox(start_point, end_point, label, font_size, scale, buffer)
-                    if offset <= 0:
-                        continue
-                    arrow_length = dist(start_point.X, start_point.Y, end_point.X, end_point.Y)
-                    if arrow_length > 30:
-                        continue
-                    remaining_length = arrow_length - offset
-                    if remaining_length <= 1.0:
-                        continue
-                    base = arcpy.Polyline(arcpy.Array([start_point, end_point]))
-                    start_point = base.positionAlongLine(offset, False).firstPoint
-                    arrow = arcpy.Polyline(arcpy.Array([start_point, end_point]), spatial_reference)
-                    insert_cursor.insertRow([arrow, scale, gml])
-                    used_parcels.add(parcel["oid"])
-                    if scale != 2000:
-                        if gml and gml not in arrow_gml_tracking:
-                            arrow_gml_tracking[gml] = end_point
-                    count += 1
+                        nearest_label = find_nearest_1000_label(label, idx_1000_gml)
+                        if not nearest_label:
+                            continue
+                        end_point = nearest_label["geometry"].firstPoint
+                else:
+                    end_point = parcel["centroid"]
+                MINIMUM_FORM_INDEX_FOR_COMPACT_PARCELS = 0.2
+                MAXIMUM_DISTANCE_BETWEEN_COMPACT_PARCEL_POINTS = 20
+                BUFFER_DISTANCE_COMPACT_PARCELS = -1.0
+                BUFFER_DISTANCE_NARROW_PARCELS = -0.2
+                start_point, end_point = set_start_and_end(start_point, end_point, parcel, MINIMUM_FORM_INDEX_FOR_COMPACT_PARCELS, MAXIMUM_DISTANCE_BETWEEN_COMPACT_PARCEL_POINTS, BUFFER_DISTANCE_COMPACT_PARCELS, BUFFER_DISTANCE_NARROW_PARCELS)
+                offset = compute_offset_using_bbox(start_point, end_point, label, font_size, scale, buffer, spatial_reference)
+                if offset <= 0:
+                    continue
+                arrow_length = dist(start_point.X, start_point.Y, end_point.X, end_point.Y)
+                if arrow_length > MAX_ARROW_LENGTH:
+                    continue
+                remaining_length = arrow_length - offset
+                if remaining_length <= MIN_ARROW_LENGTH:
+                    continue
+                base = arcpy.Polyline(arcpy.Array([start_point, end_point]))
+                start_point = base.positionAlongLine(offset, False).firstPoint
+                arrow = arcpy.Polyline(arcpy.Array([start_point, end_point]), spatial_reference)
+                insert_cursor.insertRow([arrow, scale, gml])
+                used_parcels.add(parcel["oid"])
+                if scale != 2000:
+                    if gml and gml not in arrow_gml_tracking:
+                        arrow_gml_tracking[gml] = end_point
+                count += 1
         arcpy.AddMessage(f"- {count} Zuordnungspfeile wurden für den Maßstab 1:{scale} generiert.")
 
             
