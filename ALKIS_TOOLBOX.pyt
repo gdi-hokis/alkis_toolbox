@@ -1231,24 +1231,27 @@ class CalculateAssignmentArrows:
             direction="Input"
         )
         param3.value = 200
+        param3.category = "Schwellenwerte Zuordnungspfeile"
 
         param4 = arcpy.Parameter(
-            displayName="Mindestlänge der Zuordnungspfeile (m)",
+            displayName="Mindestlänge der Zuordnungspfeile im Maßstab 1:1000 (m)",
             name="min_arrow_length",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input"
         )
         param4.value = 1
+        param4.category = "Schwellenwerte Zuordnungspfeile"
 
         param5 = arcpy.Parameter(
-            displayName="Maximallänge der Zuordnungspfeile (m)",
+            displayName="Maximallänge der Zuordnungspfeile im Maßstab 1:1000 (m)",
             name="max_arrow_length",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input"
         )
-        param5.value = 35
+        param5.value = 30
+        param5.category = "Schwellenwerte Zuordnungspfeile"
 
         param6 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
@@ -1265,16 +1268,6 @@ class CalculateAssignmentArrows:
     def updateMessages(self, parameters):
         utils.warn_overwriting_existing_layers(parameters[6], ["Zuordnungspfeile"])
 
-        # Prüfe Koordinatensystem
-        expected_wkid = 25832
-        expected_name = "ETRS89 / UTM zone 32N"
-        input_params = [parameters[0], parameters[1], parameters[2]]
-        for param in input_params:
-            if param.datatype == "GPFeatureLayer" and param.value:
-                spatial_reference = arcpy.Describe(param.valueAsText).spatialReference
-                if not spatial_reference or spatial_reference.factoryCode != expected_wkid:
-                    param.setErrorMessage(f"Das Eingabedataset muss im Koordinatensystem {expected_name} (EPGS:{expected_wkid})")
-
         # Prüfe erforderliche Felder
         for param in [parameters[0], parameters[1]]:
             if param.valueAsText:
@@ -1286,7 +1279,7 @@ class CalculateAssignmentArrows:
                         cfg["beschriftungspunkte"]["referenz_gml_id"]
                     ]
                 )
-        if parameters[0].valueAsText:
+        if parameters[2].valueAsText:
             utils.check_required_fields(parameters[2], [cfg["flurstueck"]["flurstueckstext"]])
     
     def execute(self, parameters, _messages):
