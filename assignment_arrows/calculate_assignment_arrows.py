@@ -6,37 +6,49 @@ from collections import defaultdict
 from utils import add_step_message
 from PIL import ImageFont
 
-# --- Form- und Geometrieparameter ---
+# ------------------------- #
+# --- Globale Variablen --- #
+# ------------------------- #
+LABEL_WHERE = "art = 'ZAE_NEN'"
 MINIMUM_FORM_INDEX_FOR_COMPACT_PARCELS = 0.2
 BUFFER_DISTANCE_COMPACT_PARCELS = -1.0
 BUFFER_DISTANCE_NARROW_PARCELS = -0.2
-
-# --- Schriftparameter ---
-FONT_SIZE_250 = 9.0
-FONT_SIZE_500 = 9.0
-FONT_SIZE_1000 = 8.0
-FONT_SIZE_2000 = 7.0
-
-# --- Umrechnungsparameter ---
 POINT_TO_MM = 0.352778
 MM_TO_M = 0.001
-
-# --- Caching ---
+FONT_SIZES = {
+    250: 9.0, 
+    500: 9.0, 
+    1000: 8.0, 
+    2000: 7.0
+}
 FONT_CACHE = {}
+FSK_TO_ENDPOINT = {}
 
 class SpatialGridIndex:
     # Räumlicher Grid-Index zur schnellen Nachbarschaftssuche
     def __init__(self, cell_size):
+        """
+        Initialisiert den räumlichen Grid-Index mit gegebener Zellengröße.
+        """
         self.cell_size = cell_size
         self.grid = defaultdict(list)
 
     def _cell(self, x, y):
+        """
+        Gibt die Zellkoordinate für einen Punkt zurück.
+        """
         return (int(x // self.cell_size), int(y // self.cell_size))
 
     def insert(self, x, y, obj):
+        """
+        Fügt ein Objekt an der Position (x, y) in den Grid-Index ein.
+        """
         self.grid[self._cell(x, y)].append(obj)
 
     def query(self, x, y):
+        """
+        Gibt alle Objekte in der Nachbarschaft der Zelle (x, y) zurück.
+        """
         cx, cy = self._cell(x, y)
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
@@ -45,10 +57,8 @@ class SpatialGridIndex:
 
 def normalize_part(value):
     """
-    Normalisiert Zähler oder Nenner eines Flurstücks.
-    - Entfernt Leerzeichen
-    - Wandelt numerische Strings in Integerstrings um
-    - Leere Werte werden zu None
+    Normalisiert einen Zähler oder Nenner eines Flurstücks.
+    Entfernt Leerzeichen, wandelt numerische String in Integer-Strings um und gibt None für leere Werte zurück.
     """
     if value is None:
         return None
@@ -62,10 +72,7 @@ def normalize_part(value):
 def parse_parcel_text(text):
     """
     Zerlegt einen Flurstückstext in Zähler und Nenner.
-    Beispiele:
-    "123/4" -> ("123","4")
-    "123"   -> ("123",None)
-    "/4"    -> (None,"4")
+    Gibt ein Tupel (zaehler, nenner) zurück.
     """
     if not text:
         return (None, None)
@@ -80,114 +87,154 @@ def parse_parcel_text(text):
     return normalize_part(stripped_text), None
 
 def load_labels(config, label_fc):
-    # Laden der Beschriftungspunkte
+    """
+    Lädt Beschriftungspunkte aus einer Feature-Class.
+    Gibt eine Liste von Dictionaries mit Label-Informationen zurück.
+    """
     labels = []
-    where = "art = 'ZAE_NEN'"
-    with arcpy.da.SearchCursor(label_fc, ["OID@", "SHAPE@", config["beschriftungspunkte"]["inhalt"], config["beschriftungspunkte"]["drehwinkel"], config["beschriftungspunkte"]["referenz_gml_id"]], where) as search_cursor:
-        for objectid, geometry, text, rotation, gml in search_cursor:
+    with arcpy.da.SearchCursor(
+        label_fc, 
+        [
+            "OID@", 
+            "SHAPE@", 
+            config["beschriftungspunkte"]["inhalt"], 
+            config["beschriftungspunkte"]["drehwinkel"], 
+            config["beschriftungspunkte"]["referenz_gml_id"]
+        ], 
+        LABEL_WHERE
+    ) as search_cursor:
+        for oid, geometry, text, rotation, gml_id in search_cursor:
             point = geometry.firstPoint
-            counter, denominator = parse_parcel_text(text)
+            zaehler, nenner = parse_parcel_text(text)
             labels.append({
-                "oid": objectid,
+                "oid": oid,
                 "geometry": geometry,
                 "x": point.X,
                 "y": point.Y,
-                "zaehler": counter,
-                "nenner": denominator,
+                "text": text,
+                "zaehler": zaehler,
+                "nenner": nenner,
                 "drehwinkel": rotation,
-                "referenz_gml_id": gml,
-                "text": text
+                "referenz_gml_id": gml_id                
             })
+    labels.sort(key=label_match_priority, reverse=True)
     return labels
 
 def load_parcels(config, parcel_fc):
-    # Laden der Flurstücke
+    """
+    Lädt Flurstücke aus einer Feature-Class.
+    Gibt eine Liste von Dictionaries mit Flurstücks-Informationen zurück.
+    """
     parcels = []
-    with arcpy.da.SearchCursor(parcel_fc, ["OID@", "SHAPE@", config["flurstueck"]["flurstueckskennzeichen"], config["flurstueck"]["flurstueckstext"], config["flurstueck"]["gemarkung_name"], config["flurstueck"]["gemeinde_name"]]) as cursor:
-        for objectid, geometry, fsk, text, district, community in cursor:
+    with arcpy.da.SearchCursor(
+        parcel_fc, 
+        [
+            "OID@", 
+            "SHAPE@", 
+            config["flurstueck"]["flurstueckskennzeichen"], 
+            config["flurstueck"]["flurstueckstext"], 
+            config["flurstueck"]["gemarkung_name"], 
+            config["flurstueck"]["gemeinde_name"]
+        ]
+    ) as cursor:
+        for oid, geometry, fsk, text, gemarkung, gemeinde in cursor:
             centroid = geometry.labelPoint
-            counter, denominator = parse_parcel_text(text)
+            zaehler, nenner = parse_parcel_text(text)
             parcels.append({
-                "oid": objectid,
+                "oid": oid,
                 "geometry": geometry,
                 "centroid": centroid,
                 "cx": centroid.X,
                 "cy": centroid.Y,
-                "fsk": fsk,
-                "zaehler": counter,
-                "nenner": denominator,
-                "text": text,
-                "district": district,
-                "community": community,
                 "area": geometry.area,
-                "perimeter": geometry.length
+                "perimeter": geometry.length,
+                "fsk": fsk,
+                "text": text,
+                "zaehler": zaehler,
+                "nenner": nenner,
+                "gemarkung": gemarkung,
+                "gemeinde": gemeinde                
             })
     return parcels
 
 def label_match_priority(label):
-    # Priorisierung von Beschriftungen -> Vollständige Flurstücksangabe wird zuerst verarbeitet
-    counter = label["zaehler"]
-    denominator = label["nenner"]
-    if counter and denominator:
+    """
+    Bestimmt die Priorität einer Beschriftung basierend auf der Vollständigkeit der Flurstücksangabe.
+    Gibt einen Integer-Wert für die Sortierung zurück.
+    """
+    if label["zaehler"] and label["nenner"]:
         return 3
-    if counter:
+    if label["zaehler"]:
         return 2
-    if denominator:
+    if label["nenner"]:
         return 1
     return 0
 
 def build_parcel_indices(parcels):
-    # Erstellung verschiedener Lookup-Indizes für schnelle Abfragen
+    """
+    Erstellt Lookup-Indizes für Flurstücke zur schnellen Abfrage nach Zähler, Nenner und ObjectID.
+    Gibt ein Dictionary mit verschiedenen Indizes zurück.
+    """
     index_full = defaultdict(list)
-    index_counter = defaultdict(list)
-    index_denominator = defaultdict(list)
-    index_objectid = {}
+    index_zaehler = defaultdict(list)
+    index_nenner = defaultdict(list)
+    index_oid = {}
     for parcel in parcels:
-        counter = parcel["zaehler"]
-        denominator = parcel["nenner"]
-        if counter and denominator:
-            index_full[(counter, denominator)].append(parcel)
-        if counter:
-            index_counter[counter].append(parcel)
-        if denominator:
-            index_denominator[denominator].append(parcel)
-        index_objectid[parcel["oid"]] = parcel
+        zaehler = parcel["zaehler"]
+        nenner = parcel["nenner"]
+        if zaehler and nenner:
+            index_full[(zaehler, nenner)].append(parcel)
+        if zaehler:
+            index_zaehler[zaehler].append(parcel)
+        if nenner:
+            index_nenner[nenner].append(parcel)
+        index_oid[parcel["oid"]] = parcel
     return {
         "full": index_full,
-        "zaehler": index_counter,
-        "nenner": index_denominator,
-        "oid": index_objectid
+        "zaehler": index_zaehler,
+        "nenner": index_nenner,
+        "oid": index_oid
     }
 
 def build_spatial_index(parcels, search_distance):
-    # Erstellung des Spatial Index für Flurstücke
+    """
+    Erstellt einen räumlichen Grid-Index für Flurstücke zur effizienten Nachbarschaftssuche.
+    Gibt ein SpatialGridIndex-Objekt zurück.
+    """
     index = SpatialGridIndex(search_distance)
     for parcel in parcels:
         index.insert(parcel["cx"], parcel["cy"], parcel)
     return index
 
 def spatial_join_labels_to_parcels(label_fc, parcel_fc):
-    # Ermittlung, welche Beschriftungen in welchem Flurstück liegen
-    temp_join_layer = "in_memory\\parcel_label_join"
+    """
+    Führt einen Spatial Join zwischen Beschriftungspunkten und Flurstücken durch.
+    Gibt ein Mapping von Label-ObjectIDs zu Flurstück ObjectIDs zurück.
+    """
+    scratch_gdb = arcpy.env.scratchGDB
+    temp_join_layer = os.path.join(scratch_gdb, "parcel_label_join")
     parcel_feature_layer = "parcels"
     label_feature_layer = "labels"
     mapping = defaultdict(list)
     try:
         arcpy.MakeFeatureLayer_management(parcel_fc, parcel_feature_layer)
-        arcpy.MakeFeatureLayer_management(label_fc, label_feature_layer, "art = 'ZAE_NEN'")
+        arcpy.MakeFeatureLayer_management(label_fc, label_feature_layer, LABEL_WHERE)
         arcpy.SpatialJoin_analysis(parcel_feature_layer, label_feature_layer, temp_join_layer, "JOIN_ONE_TO_MANY", match_option="CONTAINS")
         with arcpy.da.SearchCursor(temp_join_layer, ["TARGET_FID", "JOIN_FID"]) as cursor:
-            for parcel_objectid, label_objectid in cursor:
-                if label_objectid != -1:
-                    mapping[label_objectid].append(parcel_objectid)
+            for parcel_oid, label_oid in cursor:
+                if label_oid != -1:
+                    mapping[label_oid].append(parcel_oid)
     finally:
         for dataset in (temp_join_layer, parcel_feature_layer, label_feature_layer):
             if arcpy.Exists(dataset):
-                arcpy.management.Delete(dataset)
+                arcpy.Delete_management(dataset)
     return mapping
 
 def build_parcels_with_labels(label_to_parcel):
-    # Ermittelt alle Flurstücke mit vorhandenen Labels
+    """
+    Ermittelt alle Flurstücke, denen mindestens ein Label zugeordnet ist.
+    Gibt eine Menge von Flurstück ObjectIDs zurück.
+    """
     parcels_with_labels = set()
     for parcel_list in label_to_parcel.values():
         for parcel_oid in parcel_list:
@@ -195,7 +242,10 @@ def build_parcels_with_labels(label_to_parcel):
     return parcels_with_labels
 
 def create_output_featureclass(workspace, fc_name, spatial_reference):
-    # Erstellung der Ausgabe FeatureClass
+    """
+    Erstellt die Ausgabe Feature-Class für Zuordnungspfeile.
+    Legt erforderliche Felder an und gibt den Pfad zur Feature-Class zurück.
+    """
     arcpy.env.overwriteOutput = True
     fc_path = os.path.join(workspace, fc_name)
     required_fields = [
@@ -215,66 +265,97 @@ def create_output_featureclass(workspace, fc_name, spatial_reference):
             arcpy.AddField_management(fc_path, field_name, field_type, field_length=field_length, field_alias=field_alias)
     return fc_path
 
+'''
 def scale_arrow_length(min_length, scale):
-    # Skaliert die Mindestlänge für Zuordnungspfeile
+    """
+    Skaliert die Mindestlänge eines Zuordnungspfeiles abhängig vom Maßstab.
+    Gibt die angepasste Mindestlänge zurück.
+    """
     scaled_length = min_length * (scale / 1000)
     if scaled_length < min_length:
         return min_length
     else:
         return scaled_length 
+'''
     
-def semantic_match_parts(parcel_counter, parcel_denominator, label_point_counter, label_point_denominator):
-    # Prüft semantische Übereinstimmung zwischen Beschriftung und Flurstückstextinhalt
-    if label_point_counter and label_point_denominator:
-        return parcel_counter == label_point_counter and parcel_denominator == label_point_denominator
-    if label_point_counter and not label_point_denominator:
-        return parcel_counter == label_point_counter
-    if label_point_denominator and not label_point_counter:
-        return parcel_denominator == label_point_denominator
+def scale_arrow_length(length, scale):
+    """
+    Skaliert die Mindest- und Maximallänge eines Zuordnungspfeiles abhängig vom Maßstab.
+    Gibt die angepasste Mindest-/Maximallänge zurück.
+    """
+    scaled_length = length * (scale / 1000)
+    if scaled_length < length:
+        return length
+    else:
+        return scaled_length
+    
+def semantic_match_parts(parcel_zaehler, parcel_nenner, label_zaehler, label_nenner):
+    """
+    Prüft, ob Zähler und Nenner von Flurstück und Label semantisch übereinstimmen.
+    Gibt True bei Übereinstimmung, sonst False zurück.
+    """
+    if label_zaehler and label_nenner:
+        return parcel_zaehler == label_zaehler and parcel_nenner == label_nenner
+    if label_zaehler and not label_nenner:
+        return parcel_zaehler == label_zaehler
+    if label_nenner and not label_zaehler:
+        return parcel_nenner == label_nenner
     return False
     
 def check_label_inside_matching_parcel(label, label_to_parcel, parcel_indices):
-    # Prüft ob ein Label bereits im korrekten Flurstück liegt
-    label_objectid = label["oid"]
-    if label_objectid not in label_to_parcel:
-        return False, None, None, None, None, None
-    for parcel_objectid in label_to_parcel[label_objectid]:
-        parcel = parcel_indices["oid"].get(parcel_objectid)
+    """
+    Prüft, ob ein Label bereits im passenden Flurstück liegt.
+    Gibt ein Tupel zurück.
+    """
+    label_oid = label["oid"]
+    if label_oid not in label_to_parcel:
+        return False, None, None, None
+    for parcel_oid in label_to_parcel[label_oid]:
+        parcel = parcel_indices["oid"].get(parcel_oid)
         if not parcel:
             continue
         if semantic_match_parts(parcel["zaehler"], parcel["nenner"], label["zaehler"], label["nenner"]):
-            return True, parcel["fsk"], parcel["zaehler"], parcel["nenner"], parcel["district"], parcel["community"]
-    return False, None, None, None, None, None
+            return True, parcel["fsk"], parcel["zaehler"], parcel["nenner"]
+    return False, None, None, None
 
-def parcel_match_score(parcel_counter, parcel_denominator, label_counter, label_denominator):
-    # Bewertungsfunktion für Übereinstimmung von Flurstücken
-    if label_counter and label_denominator:
-        if parcel_counter == label_counter and parcel_denominator == label_denominator:
+def append_fsk_to_endpoint_dict(fsk, point, zaehler, nenner):
+    FSK_TO_ENDPOINT.setdefault(fsk, []).append({
+        "point": point,
+        "zaehler": zaehler,
+        "nenner": nenner
+    })
+
+def parcel_match_score(parcel_zaehler, parcel_nenner, label_zaehler, label_nenner):
+    """
+    Bewertet die Übereinstimmung zwischen Flurstück und Label anhand von Zähler und Nenner.
+    Gibt einen Score für die Priorisierung zurück.
+    """
+    if label_zaehler and label_nenner:
+        if parcel_zaehler == label_zaehler and parcel_nenner == label_nenner:
             return 3
         return 0
-    if label_counter and not label_denominator:
-        if parcel_counter == label_counter:
+    if label_zaehler and not label_nenner:
+        if parcel_zaehler == label_zaehler:
             return 2
         return 0
-    if label_denominator and not label_counter:
-        if parcel_denominator == label_denominator:
+    if label_nenner and not label_zaehler:
+        if parcel_nenner == label_nenner:
             return 2
         return 0
     return 0
 
-def dist(x1, y1, x2, y2):
-    # Distanzberechnung zwischen zwei Punkten
-    return math.hypot(x2 - x1, y2 - y1)
-
 def find_nearest_matching_parcel(label, spatial_index, label_to_parcel, parcels_with_labels, used_parcels):
-    # Sucht das nächste passende Flurstück
-    x_coordinate = label["x"]
-    y_coordinate = label["y"]
+    """
+    Sucht das nächstgelegende passende Flurstück für ein Label.
+    Gibt das beste Parcel-Dictionary zurück.
+    """
+    x = label["x"]
+    y = label["y"]
     inside = label_to_parcel.get(label["oid"])
-    best = None
-    best_score = -1
-    best_distance = float("inf")
-    for parcel in spatial_index.query(x_coordinate, y_coordinate):
+    best_parcel = None
+    highest_score = -1
+    shortest_distance = float("inf")
+    for parcel in spatial_index.query(x, y):
         if parcel["oid"] in used_parcels:
             continue
         if parcel["oid"] in parcels_with_labels and (not inside or parcel["oid"] not in inside):
@@ -282,27 +363,24 @@ def find_nearest_matching_parcel(label, spatial_index, label_to_parcel, parcels_
         score = parcel_match_score(parcel["zaehler"], parcel["nenner"], label["zaehler"], label["nenner"])
         if score == 0:
             continue
-        distance = dist(x_coordinate, y_coordinate, parcel["cx"], parcel["cy"])
-        if (score > best_score) or (score == best_score and distance < best_distance):
-            best = parcel
-            best_score = score
-            best_distance = distance
-    return best
+        distance = math.hypot(parcel["cx"] - x, parcel["cy"] - y)
+        if (score > highest_score) or (score == highest_score and distance < shortest_distance):
+            best_parcel = parcel
+            highest_score = score
+            shortest_distance = distance
+    return best_parcel
 
-def compute_form_index(parcel):
-    # Berechnet FormIndex eines Flurstückes
+def set_start_and_end(start_point, end_point, parcel, max_arrow_length):
+    """
+    Bestimmt Start- und Endpunkt des Zuordnungspfeils, unter Berücksichtigung der Flurstücksform. 
+    Gibt ein Tupel (start_point, end_point) zurück.
+    """
+    distance_between = math.hypot(end_point.X - start_point.X, end_point.Y - start_point.Y)
     area = parcel["area"]
     perimeter = parcel["perimeter"]
-    if perimeter == 0:
-        return 1
-    return (4 * math.pi * area) / (perimeter * perimeter)
-
-def set_start_and_end(start_point, end_point, parcel, MAX_ARROW_LENGTH):
-    # Bestimmt Start und Endpunkt des Zuordnungspfeiles
-    distance_between = dist(start_point.X, start_point.Y, end_point.X, end_point.Y)
-    form_index = compute_form_index(parcel)
+    form_index = (4 * math.pi * area) / (perimeter * perimeter) if perimeter != 0 else 1
     if form_index > MINIMUM_FORM_INDEX_FOR_COMPACT_PARCELS:
-        if distance_between < MAX_ARROW_LENGTH:
+        if distance_between < max_arrow_length:
             return start_point, end_point   
         else: 
            parcel_inner_buffer = parcel["geometry"].buffer(BUFFER_DISTANCE_COMPACT_PARCELS) 
@@ -312,23 +390,23 @@ def set_start_and_end(start_point, end_point, parcel, MAX_ARROW_LENGTH):
         inner_boundary = parcel_inner_buffer.boundary()
     else:
         inner_boundary = parcel["geometry"].boundary()
-    start_geometry = arcpy.PointGeometry(start_point, parcel["geometry"].spatialReference)
-    nearest_point, _, _, _ = inner_boundary.queryPointAndDistance(start_geometry)
+    start_geom = arcpy.PointGeometry(start_point, parcel["geometry"].spatialReference)
+    nearest_point, _, _, _ = inner_boundary.queryPointAndDistance(start_geom)
     nearest_point = nearest_point.firstPoint
-    distance_between_new = dist(start_point.X, start_point.Y, nearest_point.X, nearest_point.Y)
+    distance_between_new = math.hypot(nearest_point.X - start_point.X, nearest_point.Y - start_point.Y)
     if distance_between_new > distance_between:
         return start_point, end_point
     else:
         return start_point, nearest_point
-    
-def get_font(font_size):
-    if font_size not in FONT_CACHE:
-        FONT_CACHE[font_size] = ImageFont.truetype("arial.ttf", int(font_size))
-    return FONT_CACHE[font_size]
 
 def create_label_bbox(label, font_size, scale, spatial_reference):
-    # Erstellt eine BoundingBox um die Beschriftung
-    font = get_font(font_size)
+    """
+    Erstellt eine BoundingBox um die Beschriftung basierend auf Schriftgröße und Maßstab.
+    Gibt die BoundingBox als Polygon-Objekt zurück.
+    """
+    if font_size not in FONT_CACHE:
+        FONT_CACHE[font_size] = ImageFont.truetype("arial.ttf", int(font_size))
+    font = FONT_CACHE[font_size]
     text = str(label["text"]).strip()
     left, top, right, bottom = font.getbbox(text)
     half_width_px = max(abs(left), abs(right))
@@ -349,15 +427,18 @@ def create_label_bbox(label, font_size, scale, spatial_reference):
     theta = math.radians(360 - (label["drehwinkel"] if label["drehwinkel"] else 0))
     cos_theta = math.cos(theta)
     sin_theta = math.sin(theta)
-    points = []
-    for cx, cy in corners:
-        rx = cx * cos_theta - cy * sin_theta
-        ry = cx * sin_theta + cy * cos_theta
-        points.append(arcpy.Point(label["x"] + rx, label["y"] + ry))
+    points = [
+        arcpy.Point(label["x"] + cx * cos_theta - cy * sin_theta,
+                    label["y"] + cx * sin_theta + cy * cos_theta)
+        for cx, cy in corners
+    ]
     return arcpy.Polygon(arcpy.Array(points), spatial_reference)
 
 def segment_intersection(p1, p2, p3, p4):
-    # Berechnet Schnittpunkt zwischen Basis Zuordnungspfeil und BoundingBox für den Startpunkt
+    """
+    Berechnet den Schnittpunkt zweier Liniensegmente.
+    Gibt den Schnittpunkt als Punkt oder sofern kein Schnittpunkt vorhanden ist als None zurück.
+    """
     x1, y1 = p1.X, p1.Y
     x2, y2 = p2.X, p2.Y
     x3, y3 = p3.X, p3.Y
@@ -374,7 +455,10 @@ def segment_intersection(p1, p2, p3, p4):
     return None
     
 def compute_offset_using_bbox(start_point, end_point, label, font_size, scale, spatial_reference):
-    # Berechnet Startversatz des Pfeils außerhalb der Labelbox
+    """
+    Berechnet den Startversatz des Zuordnungspfeils außerhalb der Label-BoundingBox.
+    Gibt die Distanz als Float zurück.
+    """
     bbox = create_label_bbox(label, font_size, scale, spatial_reference)
     parts = bbox.boundary().getPart(0)
     edges = []
@@ -387,37 +471,46 @@ def compute_offset_using_bbox(start_point, end_point, label, font_size, scale, s
             intersections.append(ip)
     if not intersections:
         return 0
-    best = min(intersections, key=lambda p: dist(start_point.X, start_point.Y, p.X, p.Y))
-    return dist(start_point.X, start_point.Y, best.X, best.Y)
+    best = min(intersections, key=lambda p: math.hypot(p.X - start_point.X, p.Y - start_point.Y))
+    return math.hypot(best.X - start_point.X, best.Y - start_point.Y)
 
-def find_best_endpoint_for_label(parcel, fsk_to_endpoint):
-    candidates = fsk_to_endpoint.get(parcel["fsk"])
+def find_best_endpoint_for_label(parcel):
+    """
+    Findet den besten Endpunkt für einen Zuordnungspfeil basierend auf dem Flurstückskennzeichen.
+    Gibt einen Punkt oder None zurück.
+    """
+    candidates = FSK_TO_ENDPOINT.get(parcel["fsk"])
     if not candidates:
         return None
     for candidate in candidates:
        if semantic_match_parts(candidate["zaehler"], candidate["nenner"], parcel["zaehler"], parcel["nenner"]):
            return candidate["point"]
-       else:
-           return None
+    else:
+       return None
  
-def build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, fsk_to_endpoint, MIN_ARROW_LENGTH, MAX_ARROW_LENGTH):
-    # Erzeugt den Zuordnungspfeil für das Label
+def build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, min_arrow_length, max_arrow_length):
+    """
+    Erzeugt einen Zuordnungspfeile zwischen einem Label und einem Flurstück.
+    Gibt eine Polyline zurück oder None, falls kein Pfeil erzeugt werden muss.
+    """
     label_point = label["geometry"].firstPoint
     if scale == 2000:
-        end_point = find_best_endpoint_for_label(parcel, fsk_to_endpoint)
+        end_point = find_best_endpoint_for_label(parcel)
         if end_point is None:
             end_point = parcel["centroid"]
     else:
         end_point = parcel["centroid"]
-    start_point, adjusted_end_point = set_start_and_end(label_point, end_point, parcel, MAX_ARROW_LENGTH)
+    start_point, adjusted_end_point = set_start_and_end(label_point, end_point, parcel, max_arrow_length)
     offset = compute_offset_using_bbox(start_point, adjusted_end_point, label, font_size, scale, spatial_reference)
+    # Offset muss vorhanden sein, damit der Pfeil nicht in die Beschriftung ragt
     if offset <= 0:
         return None, adjusted_end_point
-    arrow_length = dist(start_point.X, start_point.Y, adjusted_end_point.X, adjusted_end_point.Y)
-    if arrow_length > MAX_ARROW_LENGTH:
+    # Pfeillänge muss innerhalb der Mindest-/Maximallänge für den jeweiligen Maßstab liegen
+    arrow_length = math.hypot(adjusted_end_point.X - start_point.X, adjusted_end_point.Y - start_point.Y)
+    if arrow_length > max_arrow_length:
         return None, adjusted_end_point
     remaining_length = arrow_length - offset
-    if remaining_length <= MIN_ARROW_LENGTH:
+    if remaining_length <= min_arrow_length:
         return None, adjusted_end_point
     base = arcpy.Polyline(arcpy.Array([start_point, adjusted_end_point]))
     arrow_start = base.positionAlongLine(offset, False).firstPoint
@@ -426,73 +519,57 @@ def build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, fs
         return None, adjusted_end_point
     return arrow, adjusted_end_point
 
-def generate_assignment_arrows(config, label_points_1000_fc, label_points_2000_fc, parcels_fc, MATCHING_SEARCH_DISTANCE, min_arrow_length, max_arrow_length, output_workspace):
+def generate_assignment_arrows(config, label_points_1000_fc, label_points_2000_fc, parcels_fc, matching_search_distance, min_arrow_length, max_arrow_length, output_workspace):
+    """
+    Hauptfunktion zur Berechnung und Ausgabe der Zuordnungspfeile für Beschriftungspunkte.
+    Führt alle Schritte der Zuordnung, Berechnung und Ausgabe durch.
+    """
     arcpy.env.overwriteOutput = True
     labels_1000 = load_labels(config, label_points_1000_fc)
-    arcpy.AddMessage("Beschriftungspunkte DKKM 1000 wurden erfolgreich eingelesen.")
+    arcpy.AddMessage("Beschriftungspunkte DKKM 1000 wurden erfolgreich eingelesen und nach Vollständigkeit der Flurstücksangabe sortiert.")
     labels_2000 = load_labels(config, label_points_2000_fc)
-    arcpy.AddMessage("Beschriftungspunkte DKKM 2000 wurden erfolgreich eingelesen.")
+    arcpy.AddMessage("Beschriftungspunkte DKKM 2000 wurden erfolgreich eingelesen und nach Vollständigkeit der Flurstücksangabe sortiert.")
     parcels = load_parcels(config, parcels_fc)
-    arcpy.AddMessage("Flurstücke wurden erfolgreich eingelesen.")
-    labels_1000 = sorted(labels_1000, key=label_match_priority, reverse=True)
-    labels_2000 = sorted(labels_2000, key=label_match_priority, reverse=True)
+    arcpy.AddMessage("Flurstücke wurden erfolgreich eingelesen.")   
     parcel_indices = build_parcel_indices(parcels)
-    spatial_index = build_spatial_index(parcels, MATCHING_SEARCH_DISTANCE)
+    spatial_index = build_spatial_index(parcels, matching_search_distance)
     label1000_to_parcel = spatial_join_labels_to_parcels(label_points_1000_fc, parcels_fc)
     label2000_to_parcel = spatial_join_labels_to_parcels(label_points_2000_fc, parcels_fc)
     parcels_with_labels_1000 = build_parcels_with_labels(label1000_to_parcel)
     parcels_with_labels_2000 = build_parcels_with_labels(label2000_to_parcel)
     spatial_reference=arcpy.Describe(parcels_fc).spatialReference
     SCALE_CONFIG = [
-        (250, labels_1000, label1000_to_parcel, parcels_with_labels_1000, FONT_SIZE_250),
-        (500, labels_1000, label1000_to_parcel, parcels_with_labels_1000, FONT_SIZE_500),
-        (1000, labels_1000, label1000_to_parcel, parcels_with_labels_1000, FONT_SIZE_1000),
-        (2000, labels_2000, label2000_to_parcel, parcels_with_labels_2000, FONT_SIZE_2000,)
+        (250, labels_1000, label1000_to_parcel, parcels_with_labels_1000),
+        (500, labels_1000, label1000_to_parcel, parcels_with_labels_1000),
+        (1000, labels_1000, label1000_to_parcel, parcels_with_labels_1000),
+        (2000, labels_2000, label2000_to_parcel, parcels_with_labels_2000)
     ]
-    fsk_to_endpoint = {}
     out_fc_name = "zuordnungspfeile"
     out_fc = create_output_featureclass(output_workspace, out_fc_name, spatial_reference)
-    for step, (scale, labels, label_map, parcels_with_labels, font_size) in enumerate(SCALE_CONFIG, 1):
+    for step, (scale, labels, label_map, parcels_with_labels) in enumerate(SCALE_CONFIG, 1):
         add_step_message(f"Generiere Zuordnungspfeile für den Maßstab 1:{scale}", step, 4)
+        font_size = FONT_SIZES[scale]
         used_parcels = set()
         count = 0
-        MIN_ARROW_LENGTH = scale_arrow_length(min_arrow_length, scale)
-        MAX_ARROW_LENGTH = max_arrow_length
+        min_arrow = scale_arrow_length(min_arrow_length, scale)
+        max_arrow = scale_arrow_length(max_arrow_length, scale)
         with arcpy.da.InsertCursor(out_fc, ["SHAPE@", "scale", "flurstueck", "gemeinde", "gemarkung", "referenz_gml_id"]) as insert_cursor:
             for label in labels:
-                inside, fsk, counter, denominator, district, community = check_label_inside_matching_parcel(label, label_map, parcel_indices)
+                inside, fsk, zaehler, nenner = check_label_inside_matching_parcel(label, label_map, parcel_indices)
                 if inside:
-                    fsk_to_endpoint.setdefault(fsk, []).append({
-                        "point": label["geometry"].firstPoint,
-                        "zaehler": counter,
-                        "nenner": denominator,
-                        "district": district,
-                        "community": community
-                    })
+                    if scale != 2000:
+                        append_fsk_to_endpoint_dict(fsk, label["geometry"].firstPoint, zaehler, nenner)
                     continue
                 parcel = find_nearest_matching_parcel(label, spatial_index, label_map, parcels_with_labels, used_parcels)
                 if not parcel:
                     continue
-                arrow, adjusted_end_point = build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, fsk_to_endpoint, MIN_ARROW_LENGTH, MAX_ARROW_LENGTH)
-                if scale != 2000 and arrow is None:
-                    fsk_to_endpoint.setdefault(parcel["fsk"], []).append({
-                        "point": adjusted_end_point,
-                        "zaehler": parcel["zaehler"],
-                        "nenner": parcel["nenner"],
-                        "district": parcel["district"],
-                        "community": parcel["community"]
-                    })
-                    continue           
-                insert_cursor.insertRow([arrow, scale, parcel["text"], parcel["community"], parcel["district"], label["referenz_gml_id"]])
-                used_parcels.add(parcel["oid"])
+                arrow, adjusted_end_point = build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, min_arrow, max_arrow)
                 if scale != 2000:
-                    fsk_to_endpoint.setdefault(parcel["fsk"], []).append({
-                        "point": adjusted_end_point,
-                        "zaehler": parcel["zaehler"],
-                        "nenner": parcel["nenner"],
-                        "district": parcel["district"],
-                        "community": parcel["community"]
-                    })
+                    append_fsk_to_endpoint_dict(parcel["fsk"], adjusted_end_point, parcel["zaehler"], parcel["nenner"])
+                if arrow is None:
+                    continue  
+                insert_cursor.insertRow([arrow, scale, parcel["text"], parcel["gemeinde"], parcel["gemarkung"], label["referenz_gml_id"]])
+                used_parcels.add(parcel["oid"])
                 count += 1
         arcpy.AddMessage(f"- {count} Zuordnungspfeile wurden für den Maßstab 1:{scale} generiert.")
 

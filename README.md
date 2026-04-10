@@ -308,10 +308,10 @@ Beschriftungspunkte können außerhalb ihres zugehörigen Flurstücks positionie
 - FeatureClass Beschriftungspunkte  DKKM 1000 (nora_v_al_label_nummer1)
 - FeatureClass Beschriftungspunkte DKKM 2000 (nora_v_al_label_nummer2)
 - FeatureClass Flurstücke (nora_v_al_flurstueck)
-- Suchdistanz für Treffersuche (m)
-- Mindestlänge der Zuordnungspfeile (m)
-- Maximallänge der Zuordnungspfeile (m)
 - Ziel-Geodatabase
+- Maximale Suchdistanz für Treffersuche (m)
+- Mindestlänge der Zuordnungspfeile im Maßstab 1:1000 (m)
+- Maximallänge der Zuordnungspfeile im Maßstab 1:1000 (m)
 
 **Ablauf:**
 
@@ -326,5 +326,7 @@ Beschriftungspunkte können außerhalb ihres zugehörigen Flurstücks positionie
 
 - Zuordnungspfeile für den Maßstab 1:250 -> Darstellungsbereich 0 - 1:375
 - Zuordnungspfeile für den Maßstab 500 -> Darstellungsbereich 1:376 - 1:750
-- Zuordnungspfeile für den Maßstab 1000 -> Darstellungsbereich 1:751 - 1:1000
-- Zuordnungspfeile für den Maßstab 2000 -> Darstellungsbereich 1:1001 - 1:2500
+- Zuordnungspfeile für den Maßstab 1000 -> Darstellungsbereich 1:751 - 1:1070
+- Zuordnungspfeile für den Maßstab 2000 -> Darstellungsbereich 1:1071 - 1:2500
+
+- Darstellungsbereiche können ebenfalls der Layer-Datei entnommen werden (Zuordnungspfeile.lyrx)
