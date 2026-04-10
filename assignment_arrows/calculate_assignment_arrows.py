@@ -264,19 +264,6 @@ def create_output_featureclass(workspace, fc_name, spatial_reference):
         if field_name not in existing_fields:
             arcpy.AddField_management(fc_path, field_name, field_type, field_length=field_length, field_alias=field_alias)
     return fc_path
-
-'''
-def scale_arrow_length(min_length, scale):
-    """
-    Skaliert die Mindestlänge eines Zuordnungspfeiles abhängig vom Maßstab.
-    Gibt die angepasste Mindestlänge zurück.
-    """
-    scaled_length = min_length * (scale / 1000)
-    if scaled_length < min_length:
-        return min_length
-    else:
-        return scaled_length 
-'''
     
 def scale_arrow_length(length, scale):
     """
