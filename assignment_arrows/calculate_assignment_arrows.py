@@ -11,6 +11,7 @@ from PIL import ImageFont
 # ------------------------- #
 LABEL_WHERE = "art = 'ZAE_NEN'"
 MINIMUM_FORM_INDEX_FOR_COMPACT_PARCELS = 0.2
+MAXIMUM_LENGTH_FOR_OTHER_CALCULATION = 25
 BUFFER_DISTANCE_COMPACT_PARCELS = -1.0
 BUFFER_DISTANCE_NARROW_PARCELS = -0.2
 POINT_TO_MM = 0.352778
@@ -296,14 +297,14 @@ def check_label_inside_matching_parcel(label, label_to_parcel, parcel_indices):
     """
     label_oid = label["oid"]
     if label_oid not in label_to_parcel:
-        return False, None, None, None
+        return False, None, None, None, None
     for parcel_oid in label_to_parcel[label_oid]:
         parcel = parcel_indices["oid"].get(parcel_oid)
         if not parcel:
             continue
         if semantic_match_parts(parcel["zaehler"], parcel["nenner"], label["zaehler"], label["nenner"]):
-            return True, parcel["fsk"], parcel["zaehler"], parcel["nenner"]
-    return False, None, None, None
+            return True, parcel["fsk"], parcel["zaehler"], parcel["nenner"], parcel["oid"]
+    return False, None, None, None, None
 
 def append_fsk_to_endpoint_dict(fsk, point, zaehler, nenner):
     FSK_TO_ENDPOINT.setdefault(fsk, []).append({
@@ -368,9 +369,9 @@ def set_start_and_end(start_point, end_point, parcel, max_arrow_length):
     form_index = (4 * math.pi * area) / (perimeter * perimeter) if perimeter != 0 else 1
     if form_index > MINIMUM_FORM_INDEX_FOR_COMPACT_PARCELS:
         if distance_between < max_arrow_length:
-            return start_point, end_point   
-        else: 
-           parcel_inner_buffer = parcel["geometry"].buffer(BUFFER_DISTANCE_COMPACT_PARCELS) 
+            return start_point, end_point
+        else:
+            parcel_inner_buffer = parcel["geometry"].buffer(BUFFER_DISTANCE_COMPACT_PARCELS)
     else:
         parcel_inner_buffer = parcel["geometry"].buffer(BUFFER_DISTANCE_NARROW_PARCELS)
     if parcel_inner_buffer and parcel_inner_buffer.area > 0:
@@ -506,7 +507,7 @@ def build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, mi
         return None, adjusted_end_point
     return arrow, adjusted_end_point
 
-def generate_assignment_arrows(config, label_points_1000_fc, label_points_2000_fc, parcels_fc, matching_search_distance, min_arrow_length, max_arrow_length, output_workspace):
+def generate_assignment_arrows(config, label_points_1000_fc, label_points_2000_fc, parcels_fc, matching_search_distance, min_arrow_length, output_workspace):
     """
     Hauptfunktion zur Berechnung und Ausgabe der Zuordnungspfeile für Beschriftungspunkte.
     Führt alle Schritte der Zuordnung, Berechnung und Ausgabe durch.
@@ -539,25 +540,25 @@ def generate_assignment_arrows(config, label_points_1000_fc, label_points_2000_f
         used_parcels = set()
         count = 0
         min_arrow = scale_arrow_length(min_arrow_length, scale)
-        max_arrow = scale_arrow_length(max_arrow_length, scale)
+        max_arrow = scale_arrow_length(MAXIMUM_LENGTH_FOR_OTHER_CALCULATION, scale)
         with arcpy.da.InsertCursor(out_fc, ["SHAPE@", "scale", "flurstueck", "gemeinde", "gemarkung", "referenz_gml_id"]) as insert_cursor:
             for label in labels:
-                inside, fsk, zaehler, nenner = check_label_inside_matching_parcel(label, label_map, parcel_indices)
+                inside, fsk, zaehler, nenner, oid = check_label_inside_matching_parcel(label, label_map, parcel_indices)
                 if inside:
                     if scale != 2000:
                         append_fsk_to_endpoint_dict(fsk, label["geometry"].firstPoint, zaehler, nenner)
+                    used_parcels.add(oid)
                     continue
                 parcel = find_nearest_matching_parcel(label, spatial_index, label_map, parcels_with_labels, used_parcels)
                 if not parcel:
                     continue
                 arrow, adjusted_end_point = build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, min_arrow, max_arrow)
                 if scale != 2000:
-                    append_fsk_to_endpoint_dict(parcel["fsk"], adjusted_end_point, parcel["zaehler"], parcel["nenner"])
-                if arrow is None:
-                    continue  
-                insert_cursor.insertRow([arrow, scale, parcel["text"], parcel["gemeinde"], parcel["gemarkung"], label["referenz_gml_id"]])
+                    append_fsk_to_endpoint_dict(parcel["fsk"], adjusted_end_point, parcel["zaehler"], parcel["nenner"])            
+                if arrow is not None:
+                    insert_cursor.insertRow([arrow, scale, parcel["text"], parcel["gemeinde"], parcel["gemarkung"], label["referenz_gml_id"]])
+                    count += 1
                 used_parcels.add(parcel["oid"])
-                count += 1
         arcpy.AddMessage(f"- {count} Zuordnungspfeile wurden für den Maßstab 1:{scale} generiert.")
 
             

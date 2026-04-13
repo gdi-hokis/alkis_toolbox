@@ -1244,29 +1244,19 @@ class CalculateAssignmentArrows:
         param4.category = "Schwellenwerte Zuordnungspfeile"
 
         param5 = arcpy.Parameter(
-            displayName="Maximallänge der Zuordnungspfeile im Maßstab 1:1000 (m)",
-            name="max_arrow_length",
-            datatype="GPDouble",
-            parameterType="Required",
-            direction="Input"
-        )
-        param5.value = 30
-        param5.category = "Schwellenwerte Zuordnungspfeile"
-
-        param6 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
             name="output_workspace",
             datatype="DEWorkspace",
             parameterType="Required",
             direction="Input"
         )
-        param6.filter.list = ["File Geodatabase"]
+        param5.filter.list = ["File Geodatabase"]
 
-        params = [param0, param1, param2, param3, param4, param5, param6]
+        params = [param0, param1, param2, param3, param4, param5]
         return params
     
     def updateMessages(self, parameters):
-        utils.warn_overwriting_existing_layers(parameters[6], ["Zuordnungspfeile"])
+        utils.warn_overwriting_existing_layers(parameters[5], ["Zuordnungspfeile"])
 
         # Prüfe erforderliche Felder
         for param in [parameters[0], parameters[1]]:
@@ -1290,8 +1280,7 @@ class CalculateAssignmentArrows:
         parcels_fc                         = parameters[2].valueAsText
         matching_search_distance           = parameters[3].value
         min_arrow_length                   = parameters[4].value
-        max_arrow_length                   = parameters[5].value
-        output_workspace                   = parameters[6].valueAsText
+        output_workspace                   = parameters[5].valueAsText
 
         assignment_arrows.calculate_assignment_arrows.generate_assignment_arrows( 
             cfg,
@@ -1300,7 +1289,6 @@ class CalculateAssignmentArrows:
             parcels_fc, 
             matching_search_distance,
             min_arrow_length,
-            max_arrow_length,
             output_workspace
         )
 
