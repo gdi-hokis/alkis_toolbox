@@ -106,6 +106,14 @@ def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, access_date):
 
         decoded_lines.append(line + "\n")
 
+    # Dummy-Zeile mit unkritischen Werten als erste Datenzeile einfügen,
+    # damit arcpy alle Felder als Text erkennt und keine Datumswerte interpretiert
+    header = decoded_lines[0]
+    delimiter = ";" if ";" in header else ","
+    col_count = header.count(delimiter) + 1
+    dummy_row = delimiter.join(["x"] * col_count) + "\n"
+    decoded_lines.insert(1, dummy_row)
+
     with open(output_csv, "w", encoding=encoding, newline="") as f:
         f.writelines(decoded_lines)
     return output_csv, abrufdatum
@@ -124,6 +132,11 @@ def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum, config):
     arcpy.AddMessage("- Erstelle Eigentümer-Tabelle ...")
     # erstellt Tabelle aus csv und speichert in gdb
     arcpy.TableToTable_conversion(prepared_csv, gdb, owner_table)
+
+    # Dummy-Zeile (erste Datenzeile) löschen, die nur zur Typ-Erkennung eingefügt wurde
+    # with arcpy.da.UpdateCursor(owner_table, ["OBJECTID"], "OBJECTID = 1") as cursor:
+    #     for row in cursor:
+    #         cursor.deleteRow()
 
     # Lösche leere Felder die von TableToTable fälschlicherweise erzeugt wurden (z.B. Field20)
     fields = arcpy.ListFields(owner_table)
