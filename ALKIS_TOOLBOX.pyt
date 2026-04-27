@@ -275,6 +275,15 @@ class AlkisEigentuemer:
         param2.filter.list = ["Polygon"]
 
         param3 = arcpy.Parameter(
+            displayName="Arbeitsdatenbank für temporäre Daten",
+            name="workspace_database",
+            datatype="DEWorkspace",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.filter.list = ["File Geodatabase"]
+
+        param4 = arcpy.Parameter(
             displayName="Ausgabe-Tabelle Eigentümer",
             name="endresult_table_eigentuemer",
             datatype="DETable",
@@ -282,7 +291,7 @@ class AlkisEigentuemer:
             direction="Output",
         )
 
-        param4 = arcpy.Parameter(
+        param5 = arcpy.Parameter(
             displayName="Abrufdatum",
             name="access_date",
             datatype="GPDate",
@@ -290,47 +299,47 @@ class AlkisEigentuemer:
             direction="Input",
         )
 
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Größe des Puffers [m]",
             name="buffer_size",
             datatype="GPDouble",
             parameterType="Required",
             direction="Input",
         )
-        param5.category = "Weitere Parameter"
-        param5.value = 500
+        param6.category = "Weitere Parameter"
+        param6.value = 500
 
-        param6 = arcpy.Parameter(
+        param7 = arcpy.Parameter(
             displayName="Verarbeitungsdaten behalten?",
             name="process_data",
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input",
         )
-        param6.category = "Weitere Parameter"
-        param6.value = False
+        param7.category = "Weitere Parameter"
+        param7.value = False
 
-        param7 = arcpy.Parameter(
+        param8 = arcpy.Parameter(
             displayName="Anzahl der Anfangszeilen zum Löschen",
             name="num_leading_lines",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param7.value = 1
-        param7.category = "Weitere Parameter"
+        param8.value = 1
+        param8.category = "Weitere Parameter"
 
-        param8 = arcpy.Parameter(
+        param9 = arcpy.Parameter(
             displayName="Anzahl der Endzeilen zum Löschen",
             name="num_trailing_lines",
             datatype="GPLong",
             parameterType="Required",
             direction="Input",
         )
-        param8.value = 5
-        param8.category = "Weitere Parameter"
+        param9.value = 5
+        param9.category = "Weitere Parameter"
 
-        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8]
+        params = [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9]
         return params
 
     def updateMessages(self, parameters):
@@ -340,7 +349,7 @@ class AlkisEigentuemer:
         """
         fc_gemeinden = parameters[1]
         fc_flurstuecke = parameters[2]
-        buffer_size = parameters[5]
+        buffer_size = parameters[6]
 
         # Parameter 2: Feature Class Gemeinden validieren
         utils.check_required_fields(fc_gemeinden, [cfg["gemeinde"]["gemeinde_name"]])
@@ -348,7 +357,7 @@ class AlkisEigentuemer:
         # Parameter 3: Feature Class Flurstücke validieren
         utils.check_required_fields(fc_flurstuecke, [cfg["eigentuemer"]["fsk"]])
 
-        # Parameter 5: Buffer-Größe validieren
+        # Parameter 6: Buffer-Größe validieren
         if buffer_size.value is not None and buffer_size.value < 0:
             buffer_size.setErrorMessage("Die Puffergröße darf nicht negativ sein.")
 
@@ -364,12 +373,24 @@ class AlkisEigentuemer:
         alkis_csv = parameters[0].valueAsText
         fc_gemeinden = parameters[1].value
         fc_flurstuecke = parameters[2].value
-        date = parameters[4].value
-        output_table = parameters[3].valueAsText
-        buffer_size = parameters[5].value
-        keep_temp_data = parameters[6].value
-        num_leading_lines = parameters[7].value
-        num_trailing_lines = parameters[8].value
+        workspace_gdb = parameters[3].valueAsText
+        output_path = parameters[4].valueAsText
+        date = parameters[5].value
+        buffer_size = parameters[6].value
+        keep_temp_data = parameters[7].value
+        num_leading_lines = parameters[8].value
+        num_trailing_lines = parameters[9].value
+
+        # CSV- oder GDB-Tabellenpfad ermitteln
+        is_csv = output_path.lower().endswith(".csv")
+        if is_csv:
+            output_table_name = os.path.splitext(os.path.basename(output_path))[0]
+            output_table = os.path.join(workspace_gdb, output_table_name)
+            output_csv = output_path
+        else:
+            output_table = output_path
+            output_csv = None
+
         owner.copy_alkis_eigentuemer.copy_alkis_eigentuemer(
             alkis_csv,
             fc_gemeinden,
@@ -381,6 +402,7 @@ class AlkisEigentuemer:
             num_leading_lines,
             num_trailing_lines,
             date,
+            output_csv,
         )
         return
 
