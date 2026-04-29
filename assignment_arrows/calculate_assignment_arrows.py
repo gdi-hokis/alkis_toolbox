@@ -96,22 +96,20 @@ def load_labels(config, label_fc):
         label_fc,
         [
             "OID@",
-            "SHAPE@",
+            "SHAPE@XY",
             config["beschriftungspunkte"]["inhalt"],
             config["beschriftungspunkte"]["drehwinkel"],
             config["beschriftungspunkte"]["referenz_gml_id"],
         ],
         LABEL_WHERE,
     ) as search_cursor:
-        for oid, geometry, text, rotation, gml_id in search_cursor:
-            point = geometry.firstPoint
+        for oid, (x, y), text, rotation, gml_id in search_cursor:
             zaehler, nenner = parse_parcel_text(text)
             labels.append(
                 {
                     "oid": oid,
-                    "geometry": geometry,
-                    "x": point.X,
-                    "y": point.Y,
+                    "x": x,
+                    "y": y,
                     "text": text,
                     "zaehler": zaehler,
                     "nenner": nenner,
@@ -488,19 +486,24 @@ def find_best_endpoint_for_label(parcel):
         return None
 
 
-def build_arrow_for_label(label, parcel, scale, font_size, spatial_reference, min_arrow_length, max_arrow_length):
+def build_arrow_for_label(
+    label, parcel, scale, font_size, spatial_reference, min_arrow_length, max_arrow_length, adjusted_end_point=None
+):
     """
     Erzeugt einen Zuordnungspfeile zwischen einem Label und einem Flurstück.
     Gibt eine Polyline zurück oder None, falls kein Pfeil erzeugt werden muss.
+    Wenn adjusted_end_point übergeben wird, wird set_start_and_end übersprungen.
     """
-    label_point = label["geometry"].firstPoint
-    if scale == 2000:
-        end_point = find_best_endpoint_for_label(parcel)
-        if end_point is None:
+    label_point = arcpy.Point(label["x"], label["y"])
+    start_point = label_point
+    if adjusted_end_point is None:
+        if scale == 2000:
+            end_point = find_best_endpoint_for_label(parcel)
+            if end_point is None:
+                end_point = parcel["centroid"]
+        else:
             end_point = parcel["centroid"]
-    else:
-        end_point = parcel["centroid"]
-    start_point, adjusted_end_point = set_start_and_end(label_point, end_point, parcel, max_arrow_length)
+        start_point, adjusted_end_point = set_start_and_end(label_point, end_point, parcel, max_arrow_length)
     offset = compute_offset_using_bbox(start_point, adjusted_end_point, label, font_size, scale, spatial_reference)
     # Offset muss vorhanden sein, damit der Pfeil nicht in die Beschriftung ragt
     if offset <= 0:
@@ -589,42 +592,48 @@ def generate_assignment_arrows(
             # FSK_TO_ENDPOINT pro Gemeinde zurücksetzen (verhindert falsche 2000er-Endpunkte aus anderer Gemeinde)
             FSK_TO_ENDPOINT.clear()
 
-            SCALE_CONFIG = [
-                (250, labels_1000, label1000_to_parcel, parcels_with_labels_1000),
-                (500, labels_1000, label1000_to_parcel, parcels_with_labels_1000),
-                (1000, labels_1000, label1000_to_parcel, parcels_with_labels_1000),
-                (2000, labels_2000, label2000_to_parcel, parcels_with_labels_2000),
-            ]
-            for scale, labels, label_map, parcels_with_labels in SCALE_CONFIG:
+            # Matching einmalig für Scales 250/500/1000 durchführen – alle drei nutzen dieselben Labels.
+            # max_arrow und min_arrow sind für diese Scales identisch (scale_arrow_length gibt jeweils
+            # MAXIMUM_LENGTH_FOR_OTHER_CALCULATION bzw. min_arrow_length zurück), daher ist auch
+            # adjusted_end_point (aus set_start_and_end) für alle drei Scales gleich → einmalig berechnen.
+            max_arrow_base = scale_arrow_length(MAXIMUM_LENGTH_FOR_OTHER_CALCULATION, 1000)
+            used_parcels_1000 = set()
+            matched_pairs_1000 = []  # (label, parcel, adjusted_end_point) – parcel=None wenn Label im Flurstück liegt
+            for label in labels_1000:
+                inside, fsk, zaehler, nenner, oid = check_label_inside_matching_parcel(
+                    label, label1000_to_parcel, parcel_indices
+                )
+                if inside:
+                    append_fsk_to_endpoint_dict(fsk, arcpy.Point(label["x"], label["y"]), zaehler, nenner)
+                    used_parcels_1000.add(oid)
+                    matched_pairs_1000.append((label, None, None))
+                    continue
+                parcel = find_nearest_matching_parcel(
+                    label, spatial_index, label1000_to_parcel, parcels_with_labels_1000, used_parcels_1000
+                )
+                if not parcel:
+                    continue
+                _, adjusted_end_point = set_start_and_end(
+                    arcpy.Point(label["x"], label["y"]), parcel["centroid"], parcel, max_arrow_base
+                )
+                append_fsk_to_endpoint_dict(parcel["fsk"], adjusted_end_point, parcel["zaehler"], parcel["nenner"])
+                matched_pairs_1000.append((label, parcel, adjusted_end_point))
+                used_parcels_1000.add(parcel["oid"])
+
+            for scale in (250, 500, 1000):
                 font_size = FONT_SIZES[scale]
-                used_parcels = set()
-                count = 0
                 min_arrow = scale_arrow_length(min_arrow_length, scale)
                 max_arrow = scale_arrow_length(MAXIMUM_LENGTH_FOR_OTHER_CALCULATION, scale)
+                count = 0
                 with arcpy.da.InsertCursor(
                     out_fc, ["SHAPE@", "scale", "flurstueck", "gemeinde", "gemarkung", "referenz_gml_id"]
                 ) as insert_cursor:
-                    for label in labels:
-                        inside, fsk, zaehler, nenner, oid = check_label_inside_matching_parcel(
-                            label, label_map, parcel_indices
-                        )
-                        if inside:
-                            if scale != 2000:
-                                append_fsk_to_endpoint_dict(fsk, label["geometry"].firstPoint, zaehler, nenner)
-                            used_parcels.add(oid)
+                    for label, parcel, adjusted_end_point in matched_pairs_1000:
+                        if parcel is None:
                             continue
-                        parcel = find_nearest_matching_parcel(
-                            label, spatial_index, label_map, parcels_with_labels, used_parcels
+                        arrow, _ = build_arrow_for_label(
+                            label, parcel, scale, font_size, spatial_reference, min_arrow, max_arrow, adjusted_end_point
                         )
-                        if not parcel:
-                            continue
-                        arrow, adjusted_end_point = build_arrow_for_label(
-                            label, parcel, scale, font_size, spatial_reference, min_arrow, max_arrow
-                        )
-                        if scale != 2000:
-                            append_fsk_to_endpoint_dict(
-                                parcel["fsk"], adjusted_end_point, parcel["zaehler"], parcel["nenner"]
-                            )
                         if arrow is not None:
                             insert_cursor.insertRow(
                                 [
@@ -637,8 +646,47 @@ def generate_assignment_arrows(
                                 ]
                             )
                             count += 1
-                        used_parcels.add(parcel["oid"])
                 arcpy.AddMessage(f"- {count} Zuordnungspfeile wurden für den Maßstab 1:{scale} generiert.")
+
+            # Scale 2000 separat verarbeiten (nutzt FSK_TO_ENDPOINT aus den 1000er-Scales)
+            used_parcels_2000 = set()
+            scale = 2000
+            font_size = FONT_SIZES[scale]
+            min_arrow = scale_arrow_length(min_arrow_length, scale)
+            max_arrow = scale_arrow_length(MAXIMUM_LENGTH_FOR_OTHER_CALCULATION, scale)
+            count = 0
+            with arcpy.da.InsertCursor(
+                out_fc, ["SHAPE@", "scale", "flurstueck", "gemeinde", "gemarkung", "referenz_gml_id"]
+            ) as insert_cursor:
+                for label in labels_2000:
+                    inside, fsk, zaehler, nenner, oid = check_label_inside_matching_parcel(
+                        label, label2000_to_parcel, parcel_indices
+                    )
+                    if inside:
+                        used_parcels_2000.add(oid)
+                        continue
+                    parcel = find_nearest_matching_parcel(
+                        label, spatial_index, label2000_to_parcel, parcels_with_labels_2000, used_parcels_2000
+                    )
+                    if not parcel:
+                        continue
+                    arrow, _ = build_arrow_for_label(
+                        label, parcel, scale, font_size, spatial_reference, min_arrow, max_arrow
+                    )
+                    if arrow is not None:
+                        insert_cursor.insertRow(
+                            [
+                                arrow,
+                                scale,
+                                parcel["text"],
+                                parcel["gemeinde"],
+                                parcel["gemarkung"],
+                                label["referenz_gml_id"],
+                            ]
+                        )
+                        count += 1
+                    used_parcels_2000.add(parcel["oid"])
+            arcpy.AddMessage(f"- {count} Zuordnungspfeile wurden für den Maßstab 1:{scale} generiert.")
         finally:
             for lyr in (lyr_parcels, lyr_labels_1000, lyr_labels_2000, lyr_gemeinde):
                 if arcpy.Exists(lyr):
