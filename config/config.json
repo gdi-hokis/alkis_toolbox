@@ -22,7 +22,8 @@
 		"flurnummer": "flurnummer",
 		"flurstueckstext": "flurstueckstext",
 		"objectid": "OBJECTID",
-		"gemeinde_name": "gemeinde_name"
+		"gemeinde_name": "gemeinde_name",
+		"gemeinde_id": "gemeinde_id"
 	},
 
 	"flur": { "flurname": "flurname" },
@@ -88,7 +89,8 @@
 	},
 
 	"gemeinde": {
-		"gemeinde_name": "gemeinde_name"
+		"gemeinde_name": "gemeinde_name",
+		"gemeinde_id": "gemeinde_id"
 	},
 
 	"beschriftungspunkte": {

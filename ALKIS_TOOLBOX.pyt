@@ -63,7 +63,7 @@ class Toolbox:
             CalcBodenschaetzungLabel,
             AlkisEigentuemer,
             CreateOverwriteLocator,
-            CalculateAssignmentArrows
+            CalculateAssignmentArrows,
         ]
 
 
@@ -1192,6 +1192,7 @@ class CreateOverwriteLocator:
             cfg, flst_layer, output_folder, locator_local, locator_item, overwrite_service, publish_service
         )
 
+
 class CalculateAssignmentArrows:
     def __init__(self):
         self.label = "Zuordnungspfeile berechnen"
@@ -1204,7 +1205,7 @@ class CalculateAssignmentArrows:
             name="label_points_1000_fc",
             datatype="GPFeatureLayer",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
 
         param1 = arcpy.Parameter(
@@ -1212,7 +1213,7 @@ class CalculateAssignmentArrows:
             name="label_points_2000_fc",
             datatype="GPFeatureLayer",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
 
         param2 = arcpy.Parameter(
@@ -1220,75 +1221,91 @@ class CalculateAssignmentArrows:
             name="parcels_fc",
             datatype="GPFeatureLayer",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
 
         param3 = arcpy.Parameter(
+            displayName="Gemeinden",
+            name="gemeinden_fc",
+            datatype="GPFeatureLayer",
+            parameterType="Required",
+            direction="Input",
+        )
+        param3.filter.list = ["Polygon"]
+
+        param4 = arcpy.Parameter(
             displayName="Maximale Suchdistanz für Treffersuche (m)",
             name="matching_search_distance",
             datatype="GPDouble",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
-        param3.value = 200
-        param3.category = "Schwellenwerte Zuordnungspfeile"
+        param4.value = 200
+        param4.category = "Schwellenwerte Zuordnungspfeile"
 
-        param4 = arcpy.Parameter(
+        param5 = arcpy.Parameter(
             displayName="Mindestlänge der Zuordnungspfeile im Maßstab 1:1000 (m)",
             name="min_arrow_length",
             datatype="GPDouble",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
-        param4.value = 1
-        param4.category = "Schwellenwerte Zuordnungspfeile"
+        param5.value = 1
+        param5.category = "Schwellenwerte Zuordnungspfeile"
 
-        param5 = arcpy.Parameter(
+        param6 = arcpy.Parameter(
             displayName="Ziel-Geodatabase wählen",
             name="output_workspace",
             datatype="DEWorkspace",
             parameterType="Required",
-            direction="Input"
+            direction="Input",
         )
-        param5.filter.list = ["File Geodatabase"]
+        param6.filter.list = ["File Geodatabase"]
 
-        params = [param0, param1, param2, param3, param4, param5]
+        params = [param0, param1, param2, param3, param4, param5, param6]
         return params
-    
+
     def updateMessages(self, parameters):
-        utils.warn_overwriting_existing_layers(parameters[5], ["Zuordnungspfeile"])
+        utils.warn_overwriting_existing_layers(parameters[6], ["Zuordnungspfeile"])
 
         # Prüfe erforderliche Felder
         for param in [parameters[0], parameters[1]]:
             if param.valueAsText:
                 utils.check_required_fields(
-                    param, 
+                    param,
                     [
                         cfg["beschriftungspunkte"]["inhalt"],
                         cfg["beschriftungspunkte"]["drehwinkel"],
-                        cfg["beschriftungspunkte"]["referenz_gml_id"]
-                    ]
+                        cfg["beschriftungspunkte"]["referenz_gml_id"],
+                    ],
                 )
         if parameters[2].valueAsText:
-            utils.check_required_fields(parameters[2], [cfg["flurstueck"]["flurstueckstext"]])
-    
+            utils.check_required_fields(
+                parameters[2], [cfg["flurstueck"]["flurstueckstext"], cfg["flurstueck"]["gemeinde_id"]]
+            )
+        if parameters[3].valueAsText:
+            utils.check_required_fields(parameters[3], [cfg["gemeinde"]["gemeinde_id"]])
+
     def execute(self, parameters, _messages):
         import assignment_arrows.calculate_assignment_arrows
 
-        label_points_1000_fc               = parameters[0].valueAsText
-        label_points_2000_fc               = parameters[1].valueAsText
-        parcels_fc                         = parameters[2].valueAsText
-        matching_search_distance           = parameters[3].value
-        min_arrow_length                   = parameters[4].value
-        output_workspace                   = parameters[5].valueAsText
+        importlib.reload(assignment_arrows.calculate_assignment_arrows)
 
-        assignment_arrows.calculate_assignment_arrows.generate_assignment_arrows( 
+        label_points_1000_fc = parameters[0].valueAsText
+        label_points_2000_fc = parameters[1].valueAsText
+        parcels_fc = parameters[2].valueAsText
+        gemeinden_fc = parameters[3].valueAsText
+        matching_search_distance = parameters[4].value
+        min_arrow_length = parameters[5].value
+        output_workspace = parameters[6].valueAsText
+
+        assignment_arrows.calculate_assignment_arrows.generate_assignment_arrows(
             cfg,
-            label_points_1000_fc, 
-            label_points_2000_fc, 
-            parcels_fc, 
+            label_points_1000_fc,
+            label_points_2000_fc,
+            parcels_fc,
+            gemeinden_fc,
             matching_search_distance,
             min_arrow_length,
-            output_workspace
+            output_workspace,
         )
-
