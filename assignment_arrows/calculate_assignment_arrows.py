@@ -139,7 +139,17 @@ def load_parcels(config, parcel_fc):
         ],
     ) as cursor:
         for oid, geometry, fsk, text, gemarkung, gemeinde in cursor:
-            centroid = geometry.labelPoint
+            if geometry is None or geometry.area == 0:
+                arcpy.AddWarning(f"- Flurstück OID {oid} hat keine gültige Geometrie, wird übersprungen.")
+                continue
+            try:
+                centroid = geometry.labelPoint
+            except (SystemError, AttributeError):
+                arcpy.AddWarning(f"- Flurstück OID {oid}: labelPoint nicht verfügbar, verwende Schwerpunkt.")
+                centroid = geometry.centroid
+            if centroid is None:
+                arcpy.AddWarning(f"- Flurstück OID {oid}: kein gültiger Mittelpunkt, wird übersprungen.")
+                continue
             zaehler, nenner = parse_parcel_text(text)
             parcels.append(
                 {
