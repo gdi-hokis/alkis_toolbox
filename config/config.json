@@ -6,7 +6,9 @@
 		"bewertung": "nora_v_al_bodenbewertung",
 		"lagebezeichnung": "nora_v_al_lagebezeichnung",
 		"gebaeude": "nora_v_al_gebaeude",
-		"strasse_gewann": "nora_v_al_strasse_gewann"
+		"strasse_gewann": "nora_v_al_strasse_gewann",
+		"label_nummer_1000": "nora_v_al_label_nummer1",
+		"label_nummer_2000": "nora_v_al_label_nummer2"
 	},
 
 	"flurstueck": {
@@ -20,7 +22,8 @@
 		"flurnummer": "flurnummer",
 		"flurstueckstext": "flurstueckstext",
 		"objectid": "OBJECTID",
-		"gemeinde_name": "gemeinde_name"
+		"gemeinde_name": "gemeinde_name",
+		"gemeinde_id": "gemeinde_id"
 	},
 
 	"flur": { "flurname": "flurname" },
@@ -86,7 +89,14 @@
 	},
 
 	"gemeinde": {
-		"gemeinde_name": "gemeinde_name"
+		"gemeinde_name": "gemeinde_name",
+		"gemeinde_id": "gemeinde_id"
+	},
+
+	"beschriftungspunkte": {
+		"inhalt": "inhalt",
+		"drehwinkel": "drehwinkel",
+		"referenz_gml_id": "referenz_gml_id"
 	},
 
 	"wfs_config": {
