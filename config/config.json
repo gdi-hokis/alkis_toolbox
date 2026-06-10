@@ -83,7 +83,8 @@
 		"flst": "Flurstueck",
 		"fkz": "FKZ",
 		"fsk": "fsk",
-		"hausnummer": "hausnr"
+		"hausnummer": "hausnr",
+		"geburtsdatum": "Geburtsdatum"
 	},
 
 	"gemeinde": {

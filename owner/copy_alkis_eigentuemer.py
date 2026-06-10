@@ -151,17 +151,82 @@ def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, access_date, c
     end_lines_index = -num_trailing_lines
     lines = lines[num_leading_lines:end_lines_index]
 
+    # Bestimme die erwartete Anzahl von Semikolons aus der Header-Zeile
+    header_line = lines[0].rstrip("\r\n")
+    expected_semicolon_count = header_line.count(";")
+
+    # Extrahiere Delimiter und Spaltennamen aus dem Header
+    delimiter = ";" if ";" in header_line else ","
+    col_names = [col.strip('"') for col in header_line.split(delimiter)]
+
     # Ersetze fehlerhafte HTML-Entity-Kodierungen und Encoding-Fehler
     decoded_lines = []
-    for line in lines:
+    for line_idx, line in enumerate(lines):
         # HTML-Entities - sowohl mit als auch ohne Semikolon
         line = line.rstrip("\r\n")
-        line = line.replace("&apos;", "'")
-        line = line.replace("&apos ", "'")
-        line = line.replace("&amp;", "&")
-        line = line.replace("&amp ", "&")
-        line = line.replace("&quot;", "'")
-        line = line.replace("&quot ", "'")
+        
+        # Liste der zu ersetzenden Zeichen (mit Semikolon, erfordern Semikolon-Prüfung)
+        entities_with_semicolon = [
+            ("&apos;", "'"),
+            ("&amp;", "&"),
+            ("&quot;", "'"),
+        ]
+        
+        # Liste der zu ersetzenden Zeichen (mit Leerzeichen, keine Semikolon-Prüfung)
+        entities_without_semicolon = [
+            ("&apos ", "'"),
+            ("&amp ", "&"),
+            ("&quot ", "'"),
+        ]
+        
+        # Prüfe, ob die Zeile überhaupt eine der kritischen Ersetzungen benötigt
+        needs_processing = any(entity in line for entity, _ in entities_with_semicolon)
+        
+        if needs_processing:
+            # Verarbeite jede kritische Ersetzung einzeln mit Semikolon-Prüfung
+            for entity, replacement in entities_with_semicolon:
+                while entity in line:
+                    # Test: Ersetze einmal und zähle Semikolons danach
+                    test_line = line.replace(entity, replacement, 1)
+                    semicolons_after_test = test_line.count(";")
+                    
+                    # Ersetze mit Semikolon nur wenn danach noch zu wenige Semikolons vorhanden sind
+                    # Sonst ersetze ohne Semikolon (auch wenn dabei eines verloren geht)
+                    if semicolons_after_test < expected_semicolon_count:
+                        line = line.replace(entity, replacement + ";", 1)
+                    else:
+                        line = line.replace(entity, replacement, 1)
+            
+            
+            # Nach alle Ersetzungen: Prüfe ob die Semikolon-Anzahl passt
+            final_semicolon_count = line.count(";")
+            if final_semicolon_count != expected_semicolon_count:
+                arcpy.AddWarning(
+                    f"Zeile {line_idx + 1 + num_leading_lines}: Semikolon-Anzahl stimmt nicht überein. "
+                    f"Erwartet: {expected_semicolon_count}, Gefunden: {final_semicolon_count}"
+                )
+            
+            # Prüfe Geburtsdatum-Feld: Warnung wenn Wert nicht mit "*" beginnt und nicht leer ist
+            geburtsdatum_field = cfg["eigentuemer"]["geburtsdatum"]
+            if line_idx > 0:  # Überspringe Header
+                parts = line.split(";")
+                if col_names:
+                    try:
+                        geburtsdatum_idx = [c.lower() for c in col_names].index(geburtsdatum_field.lower())
+                        if geburtsdatum_idx < len(parts):
+                            geburtsdatum_value = parts[geburtsdatum_idx].strip()
+                            if geburtsdatum_value and not geburtsdatum_value.startswith("*"):
+                                arcpy.AddWarning(
+                                    f"Zeile {line_idx + 1 + num_leading_lines}: {geburtsdatum_field} hat ungültigen Wert '{geburtsdatum_value}' (erwartet: leer oder mit '*' beginnend). | {line} | CSV-Datei an dieser Stelle manuell korrigieren (Semikolon ersetzen und an die richtige Stelle schieben, damit die Spaltenanzahl stimmt)"
+                                )
+                    except (ValueError, IndexError):
+                        pass
+        
+        # Ersetze die Zeichen ohne Semikolon (normal, ohne Prüfung)
+        for entity, replacement in entities_without_semicolon:
+            if entity in line:
+                while entity in line:
+                    line = line.replace(entity, replacement, 1)
 
         # UTF-8 als Latin-1 interpretiert - nur für Öffnen der CSV in Excel notwendig, im ArcGIS Pro eig. nicht benötigt
         mojibake_map = {"Ã¼": "ü", "Ã¶": "ö", "Ã¤": "ä", "ÃŸ": "ß", "Ã": "Ü", "Ã–": "Ö", "Ã„": "Ä", "Â": " "}
@@ -174,9 +239,6 @@ def prepare_csv(input_csv, num_leading_lines, num_trailing_lines, access_date, c
     # ArcGIS Enterprise analysiert die ersten Zeilen der CSV
     # Die Dummy-Zeile enthält je nach inferiertem Typ einen typischen Wert ('__dummy__', 0, 0.0)
     arcpy.SetProgressorLabel("Dummy-Zeile für Feldtypen einfügen ...")
-    header = decoded_lines[0].rstrip("\n")
-    delimiter = ";" if ";" in header else ","
-    col_names = [col.strip('"') for col in header.split(delimiter)]
 
     # Feldnamen die zwingend als Text importiert werden müssen aus der Config lesen
     hausnummer_field = cfg["eigentuemer"]["hausnummer"]
@@ -210,10 +272,6 @@ def make_eigentuemer_table(prepared_csv, gdb, owner_table, abrufdatum, config):
     arcpy.SetProgressorLabel("Erstelle Eigentümer-Tabelle ...")
     # erstellt Tabelle aus csv und speichert in gdb
     arcpy.TableToTable_conversion(prepared_csv, gdb, owner_table)
-    # Dummy-Zeile (erste Datenzeile) löschen, die nur zur Typ-Erkennung eingefügt wurde
-    # with arcpy.da.UpdateCursor(owner_table, ["OBJECTID"], "OBJECTID = 1") as cursor:
-    #     for row in cursor:
-    #         cursor.deleteRow()
 
     # Lösche leere Felder die von TableToTable fälschlicherweise erzeugt wurden (z.B. Field20)
     fields = arcpy.ListFields(owner_table)
