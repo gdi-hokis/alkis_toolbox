@@ -122,11 +122,11 @@ def create_locator(cfg, flst, locator_path, has_fluren=True):
             f'Parcel.PARCEL_NAME {flst_fc_name}.{cfg["flurstueck"]["flurstueckstext"]}',
             f'Parcel.NEIGHBORHOOD {flst_fc_name}.{cfg["flurstueck"]["gemeinde_name"]}',
             f'Parcel.DISTRICT_JOIN_ID {flst_fc_name}.{cfg["flurstueck"]["gemarkung_id"]}',
-            f'Parcel.DISTRICT {flst_fc_name}.{cfg["flurstueck"]["gemarkung_name"]}',
-            f"Parcel.Ortsname {flst_fc_name}.locator_place",
+            f'Parcel.DISTRICT {flst_fc_name}.{cfg["flurstueck"]["gemarkung_name"]}'
         ]
         if has_fluren:
             field_mapping.insert(4, f'Parcel.CITY {flst_fc_name}.{cfg["flur"]["flurname"]}')
+            field_mapping.insert(4,  f"Parcel.Ortsname {flst_fc_name}.locator_place")
 
         arcpy.geocoding.CreateLocator(
             country_code="DEU",

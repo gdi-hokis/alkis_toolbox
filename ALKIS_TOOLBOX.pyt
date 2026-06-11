@@ -1186,11 +1186,11 @@ class CreateOverwriteLocator:
                 cfg["flurstueck"]["flurstueckstext"],
                 cfg["flurstueck"]["gemeinde_name"],
                 cfg["flurstueck"]["gemarkung_id"],
-                cfg["flurstueck"]["gemarkung_name"],
-                "locator_place",
+                cfg["flurstueck"]["gemarkung_name"]
             ]
             if parameters[6].value:
                 required_fields.append(cfg["flur"]["flurname"])
+                required_fields.append("locator_place")
             utils.check_required_fields(parameters[0], required_fields)
         return
 
