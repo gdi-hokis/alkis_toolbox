@@ -21,10 +21,10 @@ def extract_xml_data(ax_objekt, namespaces):
         #    </zeigtAufExternes>
 
         if veraenderungsnummer is not None:
-            veraenderungsnummern = veraenderungsnummer.text.split(";")
+            veraenderungsnummern = [v.strip() for v in veraenderungsnummer.text.split(";") if v.strip()]
             benoetigte_nummern = set()
             for vn in veraenderungsnummern:
-                if vn[-1] in ("F", "V"):
+                if len(vn) > 0 and vn[-1] in ("F", "V"):
                     benoetigte_nummern.add(vn)
 
             veraenderungsnummern_ausgabe = "|".join(benoetigte_nummern)
@@ -105,10 +105,11 @@ def extract_vn(cfg, nas_folder, output_workspace, scratch_folder, keep_workdata)
                 # Gleiche Suche für AX_Flurstueck (falls enthalten)
                 for flst_element in root.findall(".//adv:AX_Flurstueck", namespaces):
                     gml_id = flst_element.get(f"{{{gml_namespace}}}id")
-                    flst_kennzeichen = flst_element.find(".flurstueckskennzeichen", namespaces).text
+                    flst_kenn_elem = flst_element.find(".flurstueckskennzeichen", namespaces)
+                    flst_kennzeichen = flst_kenn_elem.text if flst_kenn_elem is not None else ""
                     veraenderungsnummern_ausgabe = extract_xml_data(flst_element, namespaces)
 
-                    if gml_id and veraenderungsnummern_ausgabe:
+                    if gml_id and veraenderungsnummern_ausgabe and len(flst_kennzeichen) >= 2:
                         data.append([gml_id, veraenderungsnummern_ausgabe, flst_kennzeichen[:-2]])
 
                 # Schreibe die gesammelten Daten einmalig in die CSV-Datei

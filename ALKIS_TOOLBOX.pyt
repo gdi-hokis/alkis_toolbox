@@ -1143,7 +1143,16 @@ class CreateOverwriteLocator:
         )
         param5.value = True
 
-        params = [param0, param1, param2, param3, param4, param5]
+        param6 = arcpy.Parameter(
+            displayName="Fluren vorhanden?",
+            name="has_fluren",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input",
+        )
+        param6.value = True
+
+        params = [param0, param1, param2, param3, param4, param5, param6]
         return params
 
     def updateParameters(self, parameters):
@@ -1157,23 +1166,32 @@ class CreateOverwriteLocator:
             parameters[4].value = None
             parameters[5].enabled = False
             parameters[5].value = False
+
+        # Parameter 6 (Fluren vorhanden) automatisch setzen, wenn Flurstückslayer geändert wurde
+        if parameters[0].altered and not parameters[0].hasBeenValidated:
+            flst_layer = parameters[0].valueAsText
+            if flst_layer:
+                try:
+                    field_names = [f.name.lower() for f in arcpy.ListFields(flst_layer)]
+                    parameters[6].value = cfg["flur"]["flurname"].lower() in field_names
+                except Exception:
+                    pass
         return
 
     def updateMessages(self, parameters):
         """Validierung der Parameter."""
         # Prüfe erforderliche Felder im Flurstückslayer
         if parameters[0].valueAsText:
-            utils.check_required_fields(
-                parameters[0],
-                [
-                    cfg["flurstueck"]["flurstueckstext"],
-                    cfg["flurstueck"]["gemeinde_name"],
-                    cfg["flurstueck"]["gemarkung_id"],
-                    cfg["flurstueck"]["gemarkung_name"],
-                    cfg["flur"]["flurname"],
-                    "locator_place",
-                ],
-            )
+            required_fields = [
+                cfg["flurstueck"]["flurstueckstext"],
+                cfg["flurstueck"]["gemeinde_name"],
+                cfg["flurstueck"]["gemarkung_id"],
+                cfg["flurstueck"]["gemarkung_name"],
+                "locator_place",
+            ]
+            if parameters[6].value:
+                required_fields.append(cfg["flur"]["flurname"])
+            utils.check_required_fields(parameters[0], required_fields)
         return
 
     def execute(self, parameters, _messages):
@@ -1187,9 +1205,10 @@ class CreateOverwriteLocator:
         locator_item = parameters[4].valueAsText if parameters[4].value else None
         overwrite_service = parameters[3].value
         publish_service = parameters[5].value
+        has_fluren = parameters[6].value
 
         locator.build_update_locator.build_update_locator(
-            cfg, flst_layer, output_folder, locator_local, locator_item, overwrite_service, publish_service
+            cfg, flst_layer, output_folder, locator_local, locator_item, overwrite_service, publish_service, has_fluren
         )
 
 

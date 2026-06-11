@@ -100,7 +100,7 @@ def find_locator_item(portal, locator_item_url, user):
         return None, None
 
 
-def create_locator(cfg, flst, locator_path):
+def create_locator(cfg, flst, locator_path, has_fluren=True):
     """
     Erstellt einen neuen Locator.
 
@@ -108,6 +108,7 @@ def create_locator(cfg, flst, locator_path):
         cfg: Konfigurationsobjekt
         flst: Feature Class mit Flurstücken
         locator_path: Zielpfad für den Locator
+        has_fluren: True wenn Fluren vorhanden sind und flurname-Feld gemappt werden soll
 
     Returns:
         bool: True bei Erfolg, False bei Fehler
@@ -117,17 +118,20 @@ def create_locator(cfg, flst, locator_path):
         arcpy.AddMessage("- Neuen Locator erstellen...")
         flst_fc_name = os.path.basename(flst)
 
+        field_mapping = [
+            f'Parcel.PARCEL_NAME {flst_fc_name}.{cfg["flurstueck"]["flurstueckstext"]}',
+            f'Parcel.NEIGHBORHOOD {flst_fc_name}.{cfg["flurstueck"]["gemeinde_name"]}',
+            f'Parcel.DISTRICT_JOIN_ID {flst_fc_name}.{cfg["flurstueck"]["gemarkung_id"]}',
+            f'Parcel.DISTRICT {flst_fc_name}.{cfg["flurstueck"]["gemarkung_name"]}',
+            f"Parcel.Ortsname {flst_fc_name}.locator_place",
+        ]
+        if has_fluren:
+            field_mapping.insert(4, f'Parcel.CITY {flst_fc_name}.{cfg["flur"]["flurname"]}')
+
         arcpy.geocoding.CreateLocator(
             country_code="DEU",
             primary_reference_data=rf"{flst} Parcel",
-            field_mapping=[
-                f'Parcel.PARCEL_NAME {flst_fc_name}.{cfg["flurstueck"]["flurstueckstext"]}',
-                f'Parcel.NEIGHBORHOOD {flst_fc_name}.{cfg["flurstueck"]["gemeinde_name"]}',
-                f'Parcel.DISTRICT_JOIN_ID {flst_fc_name}.{cfg["flurstueck"]["gemarkung_id"]}',
-                f'Parcel.DISTRICT {flst_fc_name}.{cfg["flurstueck"]["gemarkung_name"]}',
-                f'Parcel.CITY {flst_fc_name}.{cfg["flur"]["flurname"]}',
-                f"Parcel.Ortsname {flst_fc_name}.locator_place",
-            ],
+            field_mapping=field_mapping,
             out_locator=locator_path,
             language_code="GER",
             alternatename_tables=None,
@@ -143,7 +147,7 @@ def create_locator(cfg, flst, locator_path):
         return False
 
 
-def rebuild_or_recreate_locator(cfg, flst, locator_path):
+def rebuild_or_recreate_locator(cfg, flst, locator_path, has_fluren=True):
     """
     Versucht einen Locator zu rebuilden, bei Fehler wird er neu erstellt.
 
@@ -151,6 +155,7 @@ def rebuild_or_recreate_locator(cfg, flst, locator_path):
         cfg: Konfigurationsobjekt
         flst: Feature Class mit Flurstücken
         locator_path: Pfad zum vorhandenen Locator
+        has_fluren: True wenn Fluren vorhanden sind
 
     Returns:
         bool: True bei Erfolg, False bei Fehler
@@ -165,7 +170,7 @@ def rebuild_or_recreate_locator(cfg, flst, locator_path):
     except Exception as rebuild_error:
         arcpy.AddWarning("Fehler beim Überschreiben des Locators.")
         arcpy.AddWarning(f"{str(rebuild_error)}")
-        return create_locator(cfg, flst, locator_path)
+        return create_locator(cfg, flst, locator_path, has_fluren)
 
 
 def create_and_stage_service_definition(locator_path, service_name, temp_folder, locator_item_url=None):
@@ -346,7 +351,7 @@ def get_current_sharing_status(item_id, portal):
         return None
 
 
-def build_update_locator(cfg, flst, temp_folder, locator, locator_item, overwrite_locator, publish_item=True):
+def build_update_locator(cfg, flst, temp_folder, locator, locator_item, overwrite_locator, publish_item=True, has_fluren=True):
     """
     Hauptfunktion zum Erstellen oder Aktualisieren eines Flurstücks-Locators.
 
@@ -357,6 +362,7 @@ def build_update_locator(cfg, flst, temp_folder, locator, locator_item, overwrit
         locator: Pfad zu bestehendem Locator (None für neuen Locator)
         locator_item: URL des bestehenden Locator-Items im Portal (optional)
         overwrite_locator: True um Locator im Portal zu veröffentlichen/aktualisieren
+        has_fluren: True wenn Fluren vorhanden sind und flurname-Feld verwendet werden soll
 
     Returns:
         bool: True bei Erfolg, False bei Fehler
@@ -388,10 +394,10 @@ def build_update_locator(cfg, flst, temp_folder, locator, locator_item, overwrit
             add_step_message("Locator erstellen/aktualisieren", 1, 1)
 
         if not locator:
-            if not create_locator(cfg, flst, locator_path):
+            if not create_locator(cfg, flst, locator_path, has_fluren):
                 return False
         else:
-            if not rebuild_or_recreate_locator(cfg, flst, locator_path):
+            if not rebuild_or_recreate_locator(cfg, flst, locator_path, has_fluren):
                 return False
 
         # Im Portal veröffentlichen (nur wenn gewünscht UND Anmeldung erfolgreich)
