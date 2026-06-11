@@ -205,7 +205,7 @@ def spatial_join_gem_flst(gem, flst, owner_table, buffer_size, config):
         out_feature_class="v_al_flurstueck_SpatialJoin",
         join_operation="JOIN_ONE_TO_ONE",
         join_type="KEEP_ALL",
-        field_mapping=f'{join_field} "Flurstückskey" true true false 512 Text 0 0,First,#,{flst},{join_field},0,512;gemeinden_puffer "Gemeinden (Puffer)" true true false 100 Text 0 0,Join,", ",buffer,{config['gemeinde']['gemeinde_name']},0,50',
+        field_mapping=f'{join_field} "Flurstückskey" true true false 512 Text 0 0,First,#,{flst},{join_field},0,512;gemeinden_puffer "Gemeinden (Puffer)" true true false 100 Text 0 0,Join,", ",buffer,{config["gemeinde"]["gemeinde_name"]},0,50',
         match_option="INTERSECT",
         search_radius=None,
         distance_field_name="",
