@@ -82,6 +82,7 @@ Schema aus dem WFS des LGLs
 
 **Hinweis:**
 Damit die korrekten Datentypen der Felder der csv-Datei in ArcGIS eingelesen werden, wird in der ersten Zeile eine Dummy-Zeile mit Standardwerten wie "x" für Text, 0 für Integer und 0.0 für Double eingefügt. Sie können diese nach dem Import manuell löschen.
+Das Abrufdatum wird beim Einlesen der CSV in ArcGIS Enterprise als amerikanisches Datum interpretiert und ist dort daher falsch hinterlegt. Bitte nach der jeder Aktualisierung im Portal kontrollieren und ggf. Feld berechnen.
 
 ### FLSTKEY berechnen
 
