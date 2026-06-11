@@ -297,3 +297,40 @@ Veränderungsnummern (VN) dokumentieren Änderungen an ALKIS-Objekten und sind �
 
 Es werden nur Veränderungsnummern mit den Endungen 'F' (Fortführungsriss) oder 'V' (Fortführungsnachweis) extrahiert. Bei mehreren Veränderungsnummern pro Objekt werden diese mit '|' getrennt gespeichert.
 Beachten Sie: Die Verknüpfung der Gebäude mit den Veränderungsnummern läuft über die GML-ID. File Geodatabases unterscheiden bei Textvergleichen nicht zwischen Groß-/Kleinschreibung, was zu Fehlverknüpfungen führen kann. Für zuverlässige Ergebnisse sollte eine Enterprise Geodatabase mit case-sensitiver Einstellung verwendet werden.
+
+
+### Zuordnungspfeile berechnen
+
+Dieses Werkzeug berechnet Zuordnungspfeile für Beschriftungspunkte aus DKKM 1000 und DKKM 2000, welche außerhalb ihres zugehörigen Flurstückes liegen.
+
+**Hintergrund:**
+
+Beschriftungspunkte können außerhalb ihres zugehörigen Flurstücks positioniert sein. Damit die Zuordnung zwischen Beschriftung und Flurstück eindeutig bleibt, werden Zuordnungspfeile erzeugt, die den Beschriftungspunkt mit dem entsprechenden Flurstück verbinden.
+
+**Eingabedaten:**
+
+- FeatureClass Beschriftungspunkte  DKKM 1000 (nora_v_al_label_nummer1)
+- FeatureClass Beschriftungspunkte DKKM 2000 (nora_v_al_label_nummer2)
+- FeatureClass Flurstücke (nora_v_al_flurstueck)
+- Ziel-Geodatabase
+- Maximale Suchdistanz für Treffersuche (m)
+- Mindestlänge der Zuordnungspfeile im Maßstab 1:1000 (m)
+- Maximallänge der Zuordnungspfeile im Maßstab 1:1000 (m)
+
+**Ablauf:**
+
+- Beschriftungspunkte und Flurstücke werden eingelesen und vorbereitet
+- Räumliche und semantische Indizes werden erzeugt, um eine effiziente Suche nach passenden Flurstücken zu ermöglichen
+- Generierung der Zuordnungspfeile erfolgt getrennt für die Maßstäbe 250, 500, 1000 und 2000
+- Für Beschriftungspunkte außerhalb ihres Flurstückes wird das passende Flurstück übermittelt
+- Start und Zielpunkt des Zuordnungspfeils werden bestimmt und der Zuordnungspfeil erzeugt
+- Die erzeugten Zuordnungspfeile werden in eine Ausgabe FeatureClass geschrieben
+
+**Hinweis:**
+
+- Zuordnungspfeile für den Maßstab 1:250 -> Darstellungsbereich 0 - 1:375
+- Zuordnungspfeile für den Maßstab 500 -> Darstellungsbereich 1:376 - 1:750
+- Zuordnungspfeile für den Maßstab 1000 -> Darstellungsbereich 1:751 - 1:1070
+- Zuordnungspfeile für den Maßstab 2000 -> Darstellungsbereich 1:1071 - 1:2500
+
+- Darstellungsbereiche können ebenfalls der Layer-Datei entnommen werden (Zuordnungspfeile.lyrx)
