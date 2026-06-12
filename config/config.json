@@ -85,7 +85,9 @@
 	"eigentuemer": {
 		"flst": "Flurstueck",
 		"fkz": "FKZ",
-		"fsk": "fsk"
+		"fsk": "fsk",
+		"hausnummer": "hausnr",
+		"geburtsdatum": "Geburtsdatum"
 	},
 
 	"gemeinde": {

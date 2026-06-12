@@ -80,6 +80,10 @@ Schema aus dem WFS des LGLs
 - Eigentümer-CSV des LGLs
 - Pufferradius
 
+**Hinweis:**
+Damit die korrekten Datentypen der Felder der csv-Datei in ArcGIS eingelesen werden, wird in der ersten Zeile eine Dummy-Zeile mit Standardwerten wie "x" für Text, 0 für Integer und 0.0 für Double eingefügt. Sie können diese nach dem Import manuell löschen.
+Das Abrufdatum wird beim Einlesen der CSV in ArcGIS Enterprise als amerikanisches Datum interpretiert und ist dort daher falsch hinterlegt. Bitte nach der jeder Aktualisierung im Portal kontrollieren und ggf. Feld berechnen.
+
 ### FLSTKEY berechnen
 
 Dieses Werkzeug berechnet ein Feld "FLSTKEY" für die Flurstücke. Der FLSTKEY (Flurstückskennzeichen-Schlüssel) ist ein eindeutiger, strukturierter Identifier für Flurstücke, der sich aus der Gemarkung, Flurnummer und Flurstücksnummer zusammensetzt. Beispiel: 271-0-2344/2
