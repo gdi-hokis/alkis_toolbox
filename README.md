@@ -257,15 +257,22 @@ Dieses Werkzeug erstellt oder aktualisiert einen Locator für ALKIS-Flurstücke,
 **Hintergrund:**
 Wenn die ALKIS-Daten aktualisiert werden, wird der Locator nicht automatisch mitaktualisiert. Dieses Werkzeug ermöglicht einen standardisierten Workflow für die regelmäßige Locator-Aktualisierung.
 
+In manchen Bereichen (z.B. Städten) gibt es keine Fluren – in diesen Fällen ist das Feld "flurname" leer. Das Werkzeug erkennt dies automatisch und erstellt den Locator entsprechend an, ohne das Flurname-Feld zu verwenden. Diese Einstellung kann aber auch manuell übersteuert werden.
+
 **Eingabedaten:**
 
 Schema aus dem WFS des LGLs
 
-- Flurstücke (nora_v_al_flurstueck) mit den Feldern: flurstueckstext, gemeinde_name, gemarkung_id, gemarkung_name, flurname, locator_place
+- Flurstücke (nora_v_al_flurstueck) mit den Feldern: flurstueckstext, gemeinde_name, gemarkung_id, gemarkung_name, locator_place
+- Optional: flurname (wenn Fluren vorhanden sind)
+
+**Parameter:**
+
+- **Fluren vorhanden?** (automatisch erkannt): Bestimmt, ob das Feld "flurname" im Locator-Index verwendet werden soll. Das Werkzeug prüft automatisch, ob das Feld im ausgewählten Flurstückslayer vorhanden ist, und setzt diesen Parameter entsprechend. Kann bei Bedarf manuell angepasst werden.
 
 **Ablauf:**
 
-1. Locator erstellen/aktualisieren: Entweder wird ein komplett neuer Locator erstellt oder, wenn der Locator bereits lokal abgelegt ist und sich nur die Daten der gleichen Datenquelle geändert haben, es wird ein Reindexing des vorhandenen Locators durchgeführt.
+1. Locator erstellen/aktualisieren: Entweder wird ein komplett neuer Locator erstellt oder, wenn der Locator bereits lokal abgelegt ist und sich nur die Daten der gleichen Datenquelle geändert haben, es wird ein Reindexing des vorhandenen Locators durchgeführt. Bei der Erstellung wird automatisch berücksichtigt, ob Fluren vorhanden sind.
 
 2. Portal-Veröffentlichung (optional): Der Locator wird in das verbundene Portal als Geocode Service "Flurstuecke_Locator" hochgeladen oder ein vorhandener Service wird überschrieben
 

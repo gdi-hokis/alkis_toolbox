@@ -66,7 +66,7 @@ def calculate_locator_place(cfg, flurstueck_fc):
         arcpy.CalculateField_management(
             flurstueck_fc,
             "locator_place",
-            f"calcPlace(!{cfg["flurstueck"]["gemarkung_name"]}!,!{cfg["flur"]["flurname"]}!)",
+            f'calcPlace(!{cfg["flurstueck"]["gemarkung_name"]}!,!{cfg["flur"]["flurname"]}!)',
             "PYTHON3",
             """def calcPlace(gemarkung, flurname):
     if flurname:
@@ -91,7 +91,7 @@ def calculate_fsk(cfg, flurstueck_fc):
         arcpy.CalculateField_management(
             flurstueck_fc,
             "fsk",
-            f"replaceZerosInFSK(!{cfg["flurstueck"]["flurstueckskennzeichen"]}!)",
+            f'replaceZerosInFSK(!{cfg["flurstueck"]["flurstueckskennzeichen"]}!)',
             "PYTHON3",
             """def replaceZerosInFSK(flstId):
       fsk = flstId
@@ -191,7 +191,7 @@ def calcBeschriftung(bodenart, nutzungsart, entstehung, klimastufe, wasserstufe,
         arcpy.CalculateField_management(
             bodenschaetzung_fc,
             "label",
-            f"calcBeschriftung(!{cfg["bodenschaetzung"]["bodenart_name"]}!, !{cfg["bodenschaetzung"]["nutzungsart_name"]}!, !{cfg["bodenschaetzung"]["entstehung_name"]}!, !{cfg["bodenschaetzung"]["klima_name"]}!, !{cfg["bodenschaetzung"]["wasser_name"]}!, !{cfg["bodenschaetzung"]["bodenstufe_name"]}!, !{cfg["bodenschaetzung"]["zustand_name"]}!, !{ cfg["bodenschaetzung"]["sonstige_angaben_name"]}!, !{cfg["bodenschaetzung"]["bodenzahl"]}!, !{cfg["bodenschaetzung"]["ackerzahl"]}!)",
+            f'calcBeschriftung(!{cfg["bodenschaetzung"]["bodenart_name"]}!, !{cfg["bodenschaetzung"]["nutzungsart_name"]}!, !{cfg["bodenschaetzung"]["entstehung_name"]}!, !{cfg["bodenschaetzung"]["klima_name"]}!, !{cfg["bodenschaetzung"]["wasser_name"]}!, !{cfg["bodenschaetzung"]["bodenstufe_name"]}!, !{cfg["bodenschaetzung"]["zustand_name"]}!, !{ cfg["bodenschaetzung"]["sonstige_angaben_name"]}!, !{cfg["bodenschaetzung"]["bodenzahl"]}!, !{cfg["bodenschaetzung"]["ackerzahl"]}!)',
             "PYTHON3",
             code_block,
         )
