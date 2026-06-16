@@ -26,8 +26,8 @@ ArcGIS Pro Toolbox für die Verarbeitung von ALKIS-Daten
 
 **Locator**
 
-1. Flurnamen zuordnen - Voraussetzung für Ortsnamen berechnen
-2. Ortsnamen berechnen - Voraussetzung für Locator
+1. Flurnamen zuordnen - Voraussetzung für Ortsnamen berechnen (optional, wenn es keine Fluren gibt, nicht nötig)
+2. Ortsnamen berechnen - Voraussetzung für Locator (optional, wenn es keine Fluren gibt, nicht nötig)
 3. Locator erstellen/aktualisieren
 
 **sonstige Werkzeuge (Reihenfolge egal)**
